@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#16301f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Forest Maze</title>
+<style>
+:root {
+  --bg: #14281c;
+  --holder: #7e3fc4;      /* Player 1 */
+  --ink: #fff;
+  --squirrel: #f28c28; --rabbit: #3b82f6; --bird: #f2c200; --monkey: #34a853;
+}
+body.p1 { --holder: #d6336c; }  /* Player 2 */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+.screen { display: none; position: fixed; inset: 0; flex-direction: column; }
+.screen.active { display: flex; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+
+/* generic menu screens */
+.menu { align-items: center; justify-content: center; gap: 14px; padding: 24px;
+  background: radial-gradient(circle at 50% 20%, #2c5a3a, #14281c 70%); overflow-y: auto; }
+.menu h1 { font-size: 44px; margin: 0; letter-spacing: 1px; text-align: center; }
+.menu h2 { margin: 0 0 6px; font-size: 28px; }
+.menu .emojis { font-size: 40px; letter-spacing: 6px; }
+.menu .sub { opacity: .75; margin: 0 0 10px; text-align: center; }
+.big { width: min(320px, 100%); padding: 16px; font-size: 20px; font-weight: 700; border-radius: 16px;
+  background: #fff; color: #14281c; }
+.big.alt { background: rgba(255,255,255,.14); color: #fff; }
+.big:active { transform: scale(.97); }
+.field { width: min(320px, 100%); display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 14px; opacity: .8; }
+.seg { display: flex; gap: 6px; }
+.seg button { flex: 1; padding: 12px 4px; border-radius: 12px; background: rgba(255,255,255,.12); font-weight: 600; }
+.seg button small { display: block; font-weight: 400; opacity: .7; font-size: 12px; }
+.seg button.on { background: #fff; color: #14281c; }
+input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18px; width: 100%; }
+.row { display: flex; gap: 10px; width: min(320px, 100%); }
+.row .big { flex: 1; }
+.card { width: min(420px, 100%); text-align: left; line-height: 1.45; font-size: 15px; }
+.card h3 { margin: 14px 0 4px; font-size: 16px; color: #ffd966; }
+.card p, .card ul { margin: 0 0 6px; }
+.card ul { padding-left: 20px; }
+.toggle { display: flex; justify-content: space-between; align-items: center; width: min(320px, 100%);
+  padding: 14px 16px; border-radius: 14px; background: rgba(255,255,255,.12); font-size: 18px; }
+.toggle b { padding: 4px 12px; border-radius: 12px; background: #fff; color: #14281c; font-size: 14px; }
+.toggle.off b { background: rgba(255,255,255,.2); color: #fff; }
+
+/* game screen */
+#game { background: #0f2217; }
+#hud { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center;
+  padding: calc(env(safe-area-inset-top) + 6px) 10px 6px; background: var(--holder); transition: background .25s; }
+#pauseBtn { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,.2); font-size: 18px; }
+#hudMid { text-align: center; line-height: 1.05; }
+#timer { font-size: 42px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#timer.warn { animation: pulse .5s infinite alternate; color: #ffe0e0; }
+#who { font-size: 13px; opacity: .92; font-weight: 600; }
+@keyframes pulse { from { transform: scale(1); } to { transform: scale(1.12); color: #ff9a9a; } }
+#tracker { display: flex; justify-content: center; gap: 8px; padding: 6px 8px; background: #0b1810; }
+.fi { flex: 1; max-width: 80px; display: flex; align-items: center; justify-content: center; gap: 2px;
+  padding: 4px 0; border-radius: 12px; border: 3px solid var(--c); font-size: 22px; opacity: .38; filter: grayscale(.6); transition: all .2s; }
+.fi.lit { opacity: 1; filter: none; background: color-mix(in srgb, var(--c) 45%, transparent); box-shadow: 0 0 10px var(--c); }
+.fi.out { opacity: 1; filter: none; background: var(--c); }
+#stage { position: relative; flex: 1; min-height: 0; background: var(--bg); }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+#banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); max-width: 92%;
+  background: #ffd966; color: #3a2a00; padding: 8px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
+  text-align: center; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); pointer-events: none; }
+#toast { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); background: rgba(10,20,14,.92);
+  padding: 14px 20px; border-radius: 16px; font-size: 20px; font-weight: 800; text-align: center; max-width: 86%;
+  opacity: 0; transition: opacity .25s; pointer-events: none; }
+#toast.show { opacity: 1; }
+#bar { background: var(--holder); transition: background .25s; padding: 8px 10px calc(env(safe-area-inset-bottom) + 10px);
+  display: flex; flex-direction: column; gap: 8px; }
+#actions { display: flex; gap: 6px; justify-content: center; min-height: 56px; }
+.chip { flex: 1; max-width: 84px; border-radius: 14px; background: rgba(0,0,0,.22); color: #fff; padding: 5px 0;
+  text-align: center; line-height: 1.1; }
+.chip .ic { font-size: 22px; display: block; }
+.chip small { font-size: 11px; font-weight: 600; }
+.chip.btn { background: rgba(255,255,255,.14); opacity: .55; }
+.chip.btn.lit { opacity: 1; background: #fff; color: #222; animation: glow 1s infinite alternate; }
+@keyframes glow { from { box-shadow: 0 0 0 0 rgba(255,255,255,.7); } to { box-shadow: 0 0 0 6px rgba(255,255,255,0); } }
+.chip.btn.armed { background: #ffd966; color: #222; opacity: 1; }
+#btnRow { display: flex; gap: 10px; }
+#fitBtn { width: 60px; height: 60px; border-radius: 30px; background: rgba(255,255,255,.2); font-size: 24px; }
+#passBtn { flex: 1; height: 60px; border-radius: 30px; background: #fff; color: var(--holder); font-size: 21px; font-weight: 800; }
+#passBtn:active { transform: scale(.97); }
+
+/* overlay */
+#overlay { position: fixed; inset: 0; background: rgba(8,16,11,.86); display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px; padding: 24px; z-index: 10; text-align: center; }
+#overlay.show { display: flex; }
+#overlay h2 { margin: 0; font-size: 30px; }
+#overlay p { margin: 0; opacity: .8; max-width: 320px; }
+
+/* end */
+#end .stats { display: grid; grid-template-columns: auto auto; gap: 6px 18px; font-size: 18px; margin: 6px 0 12px; }
+#end .stats span:nth-child(odd) { opacity: .7; text-align: right; }
+#endTitle { font-size: 40px; text-align: center; margin: 0; }
+</style>
+</head>
+<body class="p0">
+
+<!-- TITLE -->
+<section id="title" class="screen menu active">
+  <div class="emojis">🐿️🐰🐦🐒</div>
+  <h1>Forest Maze</h1>
+  <p class="sub">A co-op race for two players and one phone.</p>
+  <button class="big" id="btnPlay">Play</button>
+  <button class="big alt" id="btnHow">How to play</button>
+  <button class="big alt" id="btnSettings">Settings</button>
+</section>
+
+<!-- SETUP -->
+<section id="setup" class="screen menu">
+  <h2>New game</h2>
+  <div class="field">
+    <label>Difficulty (number of tiles)</label>
+    <div class="seg" id="diffSeg">
+      <button data-d="easy">Easy<small>8 tiles</small></button>
+      <button data-d="normal">Normal<small>12 tiles</small></button>
+      <button data-d="hard">Hard<small>16 tiles</small></button>
+    </div>
+  </div>
+  <div class="field">
+    <label for="seedIn">Map seed (optional)</label>
+    <input type="text" id="seedIn" inputmode="text" autocomplete="off" placeholder="Random">
+  </div>
+  <div class="field" id="bestLine" style="opacity:.75;font-size:14px"></div>
+  <button class="big" id="btnStart">Start</button>
+  <button class="big alt" id="btnSetupBack">Back</button>
+</section>
+
+<!-- HOW TO PLAY -->
+<section id="how" class="screen menu">
+  <h2>How to play</h2>
+  <div class="card">
+    <p>Four forest animals must each find their food, grab it together, and get out before the clock runs out. You win or lose as a team.</p>
+    <h3>Three steps</h3>
+    <ul>
+      <li><b>Forage</b> – bring each animal to its own food square.</li>
+      <li><b>Grab</b> – when all four stand on their food at once, the food is taken automatically and the burrows close.</li>
+      <li><b>Escape</b> – bring all four animals to the exit.</li>
+    </ul>
+    <h3>One phone, split actions</h3>
+    <p>Only the holder plays, and each player has only some actions:</p>
+    <ul>
+      <li><b>Set A:</b> ⬆️ Up, ⬅️ Left, 🧭 Explore</li>
+      <li><b>Set B:</b> ⬇️ Down, ➡️ Right, 🪵 Climb, 🕳️ Burrow</li>
+    </ul>
+    <p>Tap <b>Pass</b> and hand over the phone. The clock never stops.</p>
+    <h3>Controls</h3>
+    <ul>
+      <li>Tap an animal, then tap a lit square to move there. Animals slide in a straight line and are blocked by walls, bushes and each other.</li>
+      <li>🧭 Explore: an animal on a doorway of its own colour reveals the next tile.</li>
+      <li>🪵 Climb: from one end of a log to the other.</li>
+      <li>🕳️ Burrow: from a burrow to another burrow of the same colour.</li>
+      <li>Drag to pan, pinch to zoom, ⤢ to fit the map. Long-press a square or animal to leave a ping.</li>
+    </ul>
+    <h3>Timer squares ⏳</h3>
+    <p>Stopping on one flips the clock (new time = 3:00 − time left) and swaps the two action sets. Talk freely until the next move.</p>
+    <h3>Silence</h3>
+    <p>No talking, pointing or gesturing about the game. Use pings. The only exception is talk time after a timer flip.</p>
+  </div>
+  <button class="big" id="btnHowBack">Back</button>
+</section>
+
+<!-- SETTINGS -->
+<section id="settings" class="screen menu">
+  <h2>Settings</h2>
+  <button class="toggle" id="tgSound"><span>Sound</span><b>On</b></button>
+  <button class="toggle" id="tgVib"><span>Vibration</span><b>On</b></button>
+  <button class="big alt" id="btnClearBest">Reset best times</button>
+  <button class="big" id="btnSettingsBack">Back</button>
+</section>
+
+<!-- GAME -->
+<section id="game" class="screen">
+  <div id="hud">
+    <button id="pauseBtn" aria-label="Pause">⏸</button>
+    <div id="hudMid"><div id="timer">3:00</div><div id="who"></div></div>
+    <div></div>
+  </div>
+  <div id="tracker"></div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="banner">🗣️ Talk time! Talk freely until the next move.</div>
+    <div id="toast"></div>
+  </div>
+  <div id="bar">
+    <div id="actions"></div>
+    <div id="btnRow">
+      <button id="fitBtn" aria-label="Fit map">⤢</button>
+      <button id="passBtn">Pass the phone ➜</button>
+    </div>
+  </div>
+</section>
+
+<!-- END -->
+<section id="end" class="screen menu">
+  <h1 id="endTitle"></h1>
+  <div class="stats" id="endStats"></div>
+  <button class="big" id="btnReplay">Replay (same map)</button>
+  <button class="big alt" id="btnNew">New map</button>
+  <button class="big alt" id="btnEndTitle">Title</button>
+</section>
+
+<div id="overlay"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   FOREST MAZE — single file, no framework.
+   Section 1: CONFIG + game logic (no DOM, no drawing). Tested from console: FM.runTests()
+   Section 2: UI (renderer reads state; input turns touches into actions)
+   ===================================================================== */
+
+// ===== LOGIC START =====
+const CONFIG = {
+  timerStartMs: 3 * 60 * 1000,            // timer start
+  timerSquares: 4,                         // timer squares per game (enforced when building the deck)
+  tileSize: 5,                             // squares per tile side (layout code assumes 5)
+  tilesPerGame: { easy: 8, normal: 12, hard: 16 },   // plus the start tile
+  burrowsPerAnimal: 2,                     // informational: one on the start tile, one on its food tile
+  moveCapPerHold: 0,                       // 0 = no limit. Try 5 if holds run long
+  trailMs: 3000,                           // catch-up trail display
+  warnMs: 30 * 1000,                       // pulse + tick under this
+};
+
+const ANIMALS = ['squirrel', 'rabbit', 'bird', 'monkey'];
+const INFO = {
+  squirrel: { emoji: '🐿️', food: '🌰', color: '#f28c28', name: 'Squirrel', foodName: 'Nut' },
+  rabbit:   { emoji: '🐰', food: '🥕', color: '#3b82f6', name: 'Rabbit',   foodName: 'Carrot' },
+  bird:     { emoji: '🐦', food: '🌾', color: '#f2c200', name: 'Bird',     foodName: 'Grain' },
+  monkey:   { emoji: '🐒', food: '🍌', color: '#34a853', name: 'Monkey',   foodName: 'Banana' },
+};
+const ACTION_SETS = [['up', 'left', 'explore'], ['down', 'right', 'climb', 'burrow']];
+const SIDES = ['N', 'E', 'S', 'W'];
+const DV = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
+const OPP = { N: 'S', S: 'N', E: 'W', W: 'E' };
+const ACT_DIR = { up: 'N', down: 'S', left: 'W', right: 'E' };
+const DOOR_IDX = { N: 2, E: 14, S: 22, W: 10 };   // door = middle square of each tile side
+const TS = CONFIG.tileSize;
+
+// ---------- seeded random ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function shuffle(arr, rng) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+// ---------- tile library (hand-made data) ----------
+// Rows: . plain  # bush  T timer  E exit  S/R/B/M food (squirrel/rabbit/bird/monkey)  s/r/b/m burrow
+// Doors: "N:b E:s" = side:colour. Door squares are the middle square of a side and must be walkable.
+// Walls: "row col SIDE" = fence on that edge of that square. Logs: [[r,c],[r,c]] climbable link.
+const CH_FOOD = { S: 'squirrel', R: 'rabbit', B: 'bird', M: 'monkey' };
+const CH_ANIMAL = { s: 'squirrel', r: 'rabbit', b: 'bird', m: 'monkey' };
+function tile(id, kind, rows, doorStr, walls, logs) {
+  const squares = []; let timers = 0;
+  for (const ch of rows.join('')) {
+    if (ch === '.') squares.push({ kind: 'plain' });
+    else if (ch === '#') squares.push({ kind: 'bush' });
+    else if (ch === 'T') { squares.push({ kind: 'timer' }); timers++; }
+    else if (ch === 'E') squares.push({ kind: 'exit' });
+    else if (CH_FOOD[ch]) squares.push({ kind: 'food', animal: CH_FOOD[ch] });
+    else if (CH_ANIMAL[ch]) squares.push({ kind: 'burrow', animal: CH_ANIMAL[ch] });
+    else throw new Error('bad tile char ' + ch + ' in ' + id);
+  }
+  if (squares.length !== 25) throw new Error('tile ' + id + ' is not 5x5');
+  const doors = {};
+  doorStr.split(' ').filter(Boolean).forEach(p => { const [s, c] = p.split(':'); doors[s] = CH_ANIMAL[c]; });
+  const wl = (walls || []).map(w => {
+    const [r, c, d] = w.split(' '); const R = +r, C = +c;
+    const a = R * 5 + C, b = (R + DV[d][1]) * 5 + (C + DV[d][0]);
+    return a < b ? [a, b] : [b, a];
+  });
+  const lg = (logs || []).map(([[r1, c1], [r2, c2]]) => [r1 * 5 + c1, r2 * 5 + c2]);
+  return { id, kind, squares, walls: wl, doors, logs: lg, timers };
+}
+
+const LIB = {};
+[
+  tile('start', 'start', ['#...#', '.s.r.', '.....', '.m.b.', '#...#'], 'N:s E:r S:b W:m'),
+  // food tiles: each holds the food and a burrow of the same colour
+  tile('food-squirrel', 'food', ['#....', '..#S.', '..#..', '.....', '.s..#'], 'N:b W:m S:r', ['3 2 E']),
+  tile('food-rabbit',   'food', ['.#...', 'r.#.R', '...#.', '.#...', '.....'], 'N:s E:m W:b', ['0 3 S']),
+  tile('food-bird',     'food', ['....B', '.##..', '..b..', '#...#', '..#..'], 'N:m W:r E:s', ['0 3 E']),
+  tile('food-monkey',   'food', ['..#M.', '.#...', '.....', '.m#..', '#....'], 'W:s E:b S:r'),
+  tile('exit', 'exit', ['.....', '.#.#.', '..E..', '.#.#.', '....T'], 'N:r W:b S:s E:m', ['2 1 E', '2 2 E']),
+  // generic tiles with one timer square
+  tile('t1', 'generic', ['T....', '.##..', '.....', '..#..', '#....'], 'N:b W:r S:m'),
+  tile('t2', 'generic', ['.....', '..#..', '.#.T.', '..#..', '.....'], 'N:m E:b S:s W:r'),
+  tile('t3', 'generic', ['....T', '.....', '#####', '.....', '.....'], 'N:r S:s', [], [[[1, 1], [3, 3]]]),
+  tile('t4', 'generic', ['.....', '#.#.#', '.....', '#.#.#', '....T'], 'N:m E:s W:b'),
+  tile('t5', 'generic', ['.#...', '...#.', '.#T..', '...#.', '.#...'], 'W:b S:m E:r'),
+  // generic tiles without timers
+  tile('p1', 'generic', ['.....', '.#.#.', '.....', '.#.#.', '.....'], 'N:r E:b S:s W:m'),
+  tile('p2', 'generic', ['..#..', '.#..#', '.....', '#..#.', '.....'], 'E:m W:s S:b'),
+  tile('p3', 'generic', ['.....', '.....', '.....', '.....', '.....'], 'N:b S:r W:s', ['1 1 E', '1 1 S', '3 3 W', '3 3 N']),
+  tile('p4', 'generic', ['#...#', '..#..', '.....', '..#..', '#...#'], 'N:m S:b W:r'),
+  tile('p5', 'generic', ['..#..', '..#..', '..#..', '..#..', '..#..'], 'E:s W:b', [], [[[1, 1], [3, 3]]]),
+  tile('p6', 'generic', ['....#', '.#...', '...#.', '.#...', '#....'], 'N:s W:m S:r'),
+  tile('p7', 'generic', ['.....', '.....', '.....', '.....', '.....'], 'N:r E:m S:s', ['0 0 S', '0 1 S', '2 2 E', '2 2 S', '3 3 E', '1 3 W']),
+  tile('p8', 'generic', ['.#.#.', '.....', '#.#.#', '.....', '.#.#.'], 'N:s S:b'),
+  tile('p9', 'generic', ['.....', '#...#', '..#..', '#...#', '.....'], 'N:m S:r W:s', ['0 2 S', '4 2 N']),
+].forEach(t => { LIB[t.id] = t; });
+const FOOD_TILES = ANIMALS.map(a => 'food-' + a);
+
+// Start layout: animals stand around the centre, each next to the doorway of its own colour.
+const START_POS = { squirrel: [1, 2], rabbit: [2, 3], bird: [3, 2], monkey: [2, 1] };
+
+// ---------- tile rotation ----------
+function rotIndex(i, k) {                       // quarter turns clockwise
+  for (let n = 0; n < k; n++) { const r = Math.floor(i / 5), c = i % 5; i = c * 5 + (4 - r); }
+  return i;
+}
+function rotateDef(def, k) {
+  def._rot = def._rot || {};
+  if (def._rot[k]) return def._rot[k];
+  const squares = new Array(25);
+  def.squares.forEach((s, i) => { squares[rotIndex(i, k)] = s; });
+  const pair = ([a, b]) => { a = rotIndex(a, k); b = rotIndex(b, k); return a < b ? [a, b] : [b, a]; };
+  const doors = {};
+  for (const s in def.doors) doors[SIDES[(SIDES.indexOf(s) + k) % 4]] = def.doors[s];
+  return (def._rot[k] = { squares, walls: def.walls.map(pair), logs: def.logs.map(pair), doors });
+}
+
+// ---------- deck ----------
+function buildDeck(seed, difficulty) {
+  const rng = mulberry32(seed);
+  const n = CONFIG.tilesPerGame[difficulty];
+  const generic = Object.values(LIB).filter(t => t.kind === 'generic');
+  const withTimer = shuffle(generic.filter(t => t.timers > 0), rng);
+  const without = shuffle(generic.filter(t => t.timers === 0), rng);
+  const fillers = n - FOOD_TILES.length - 1;
+  const needTimers = Math.max(0, CONFIG.timerSquares - LIB.exit.timers);
+  const takeT = Math.min(needTimers, fillers, withTimer.length);
+  const chosen = withTimer.slice(0, takeT).concat(without.slice(0, fillers - takeT));
+  if (chosen.length < fillers) chosen.push(...withTimer.slice(takeT, takeT + fillers - chosen.length));
+  const rest = shuffle(FOOD_TILES.concat(chosen.map(t => t.id)), rng);
+  const half = Math.floor(n / 2);                                   // exit goes in the second half
+  const at = half + Math.floor(rng() * (n - half));
+  rest.splice(Math.min(at, rest.length), 0, 'exit');
+  return rest;
+}
+
+// ---------- state ----------
+const key = (x, y) => x + ',' + y;
+function newGame(opts) {
+  const seed = (opts.seed >>> 0);
+  const difficulty = opts.difficulty || 'normal';
+  const state = {
+    seed, difficulty,
+    tiles: [], deck: buildDeck(seed, difficulty),
+    animals: {}, phase: 'forage',
+    timeLeftMs: CONFIG.timerStartMs, usedTimers: [],
+    holder: 0, actionSets: [ACTION_SETS[0].slice(), ACTION_SETS[1].slice()],
+    talkAllowed: false, ping: null, lastHold: [], grabbed: false,
+    // extras (derived or bookkeeping)
+    lattice: {}, cells: {}, walls: {}, wallList: [], logs: {}, logList: [],
+    curHold: [], curReveal: [], lastReveal: [],
+    handoffs: 0, moves: 0, paused: false, lastTickMs: null, result: null,
+  };
+  placeTile(state, LIB.start, 0, 0, 0);
+  for (const a of ANIMALS) state.animals[a] = { pos: { x: START_POS[a][1], y: START_POS[a][0] }, escaped: false };
+  return state;
+}
+
+function wallKey(ax, ay, bx, by) { return (ax < bx || (ax === bx && ay < by)) ? key(ax, ay) + '|' + key(bx, by) : key(bx, by) + '|' + key(ax, ay); }
+
+function placeTile(state, def, rot, tx, ty) {
+  const rd = rotateDef(def, rot);
+  const idx = state.tiles.length;
+  state.tiles.push({ def, rotation: rot, tx, ty });
+  state.lattice[key(tx, ty)] = idx;
+  const gx = i => tx * TS + (i % 5), gy = i => ty * TS + Math.floor(i / 5);
+  rd.squares.forEach((sq, i) => {
+    const x = gx(i), y = gy(i);
+    state.cells[key(x, y)] = Object.assign({ x, y, tile: idx, door: null }, sq);
+  });
+  for (const side in rd.doors) {
+    const i = DOOR_IDX[side];
+    state.cells[key(gx(i), gy(i))].door = { side, animal: rd.doors[side] };
+  }
+  rd.walls.forEach(([a, b]) => {
+    state.walls[wallKey(gx(a), gy(a), gx(b), gy(b))] = 1;
+    state.wallList.push([gx(a), gy(a), gx(b), gy(b)]);
+  });
+  rd.logs.forEach(([a, b]) => {
+    state.logs[key(gx(a), gy(a))] = { x: gx(b), y: gy(b) };
+    state.logs[key(gx(b), gy(b))] = { x: gx(a), y: gy(a) };
+    state.logList.push([gx(a), gy(a), gx(b), gy(b)]);
+  });
+  return idx;
+}
+
+// ---------- queries ----------
+const cellAt = (state, x, y) => state.cells[key(x, y)];
+function animalAt(state, x, y) {
+  for (const a of ANIMALS) { const an = state.animals[a]; if (!an.escaped && an.pos.x === x && an.pos.y === y) return a; }
+  return null;
+}
+const isOver = state => state.phase === 'won' || state.phase === 'lost';
+const holderActions = state => state.actionSets[state.holder];
+function timerUsed(state, x, y) { return state.usedTimers.some(p => p.x === x && p.y === y); }
+
+// What a square currently does, taking the phase into account.
+function effectiveKind(state, c) {
+  switch (c.kind) {
+    case 'food': return state.grabbed ? 'taken' : 'food';
+    case 'burrow': return state.grabbed ? 'closedBurrow' : 'burrow';
+    case 'timer': return timerUsed(state, c.x, c.y) ? 'usedTimer' : 'timer';
+    case 'exit': return state.grabbed ? 'exit' : 'lockedExit';
+  }
+  return c.kind;
+}
+
+// Door list for a set of placed tiles. status: open (can be explored), linked (passable), closed.
+function doorwayList(tiles, deckLen) {
+  const occ = {}; tiles.forEach((t, i) => { occ[key(t.tx, t.ty)] = i; });
+  const out = [];
+  tiles.forEach((t, i) => {
+    const rd = rotateDef(t.def, t.rotation);
+    for (const side in rd.doors) {
+      const [dx, dy] = DV[side]; const j = occ[key(t.tx + dx, t.ty + dy)];
+      let status;
+      if (j === undefined) status = deckLen > 0 ? 'open' : 'closed';
+      else status = rotateDef(tiles[j].def, tiles[j].rotation).doors[OPP[side]] ? 'linked' : 'closed';
+      const sq = DOOR_IDX[side];
+      out.push({ tile: i, side, animal: rd.doors[side], status,
+        x: t.tx * TS + (sq % 5), y: t.ty * TS + Math.floor(sq / 5), nx: t.tx + dx, ny: t.ty + dy });
+    }
+  });
+  return out;
+}
+const doorways = state => doorwayList(state.tiles, state.deck.length);
+
+// The square reached by one step from (x,y) in direction d, or null if blocked (ignores animals).
+function stepFrom(state, x, y, d) {
+  const c1 = cellAt(state, x, y); if (!c1) return null;
+  const nx = x + DV[d][0], ny = y + DV[d][1];
+  const c2 = cellAt(state, nx, ny);
+  if (!c2 || c2.kind === 'bush') return null;
+  if (c1.tile === c2.tile) { if (state.walls[wallKey(x, y, nx, ny)]) return null; }
+  else if (!(c1.door && c1.door.side === d && c2.door && c2.door.side === OPP[d])) return null;
+  return c2;
+}
+
+// Squares the animal can go to with the actions the holder has now.
+function legalTargets(state, name) {
+  const an = state.animals[name], out = [];
+  if (!an || an.escaped || isOver(state)) return out;
+  const acts = holderActions(state);
+  for (const act of acts) {
+    const d = ACT_DIR[act]; if (!d) continue;
+    let { x, y } = an.pos;
+    for (;;) {
+      const c = stepFrom(state, x, y, d);
+      if (!c || animalAt(state, c.x, c.y)) break;
+      out.push({ x: c.x, y: c.y, action: act });
+      x = c.x; y = c.y;
+    }
+  }
+  if (acts.includes('climb')) {
+    const l = state.logs[key(an.pos.x, an.pos.y)];
+    if (l && !animalAt(state, l.x, l.y)) out.push({ x: l.x, y: l.y, action: 'climb' });
+  }
+  if (acts.includes('burrow') && state.phase === 'forage') {
+    const here = cellAt(state, an.pos.x, an.pos.y);
+    if (here.kind === 'burrow' && here.animal === name) {
+      for (const k in state.cells) {
+        const c = state.cells[k];
+        if (c.kind === 'burrow' && c.animal === name && c !== here && !animalAt(state, c.x, c.y)) out.push({ x: c.x, y: c.y, action: 'burrow' });
+      }
+    }
+  }
+  return out;
+}
+
+// Which doorway (if any) the animal can explore from right now, ignoring the holder's actions.
+function exploreDoor(state, name) {
+  const an = state.animals[name]; if (!an || an.escaped || state.deck.length === 0) return null;
+  const c = cellAt(state, an.pos.x, an.pos.y);
+  if (!c || !c.door || c.door.animal !== name) return null;
+  return doorways(state).find(d => d.x === c.x && d.y === c.y && d.status === 'open') || null;
+}
+function availableActions(state, name) {
+  const acts = holderActions(state), t = legalTargets(state, name);
+  return {
+    explore: acts.includes('explore') && !isOver(state) && !!exploreDoor(state, name),
+    climb: t.some(x => x.action === 'climb'),
+    burrow: t.some(x => x.action === 'burrow'),
+  };
+}
+
+// ---------- exploring ----------
+function rotationOrder(seed, id, tx, ty) { return shuffle([0, 1, 2, 3], mulberry32(hashStr(seed + '|' + id + '|' + tx + ',' + ty))); }
+
+// Draw the first tile in the deck that fits behind the doorway. Rotation depends only on (seed, tile, cell),
+// so the same seed and the same exploring order always give the same map.
+function drawTileAt(state, door) {
+  const facing = OPP[door.side];
+  const tryPick = strict => {
+    for (let i = 0; i < state.deck.length; i++) {
+      const def = LIB[state.deck[i]];
+      for (const rot of rotationOrder(state.seed, def.id, door.nx, door.ny)) {
+        if (!rotateDef(def, rot).doors[facing]) continue;
+        if (strict && state.deck.length > 1) {
+          const hyp = state.tiles.concat([{ def, rotation: rot, tx: door.nx, ty: door.ny }]);
+          if (!doorwayList(hyp, state.deck.length - 1).some(d => d.status === 'open')) continue;
+        }
+        return { i, rot, def };
+      }
+    }
+    return null;
+  };
+  const pick = tryPick(true) || tryPick(false);
+  if (!pick) return null;
+  state.deck.splice(pick.i, 1);
+  return placeTile(state, pick.def, pick.rot, door.nx, door.ny);
+}
+
+// ---------- clock ----------
+function tick(state, nowMs) {
+  if (state.lastTickMs == null) state.lastTickMs = nowMs;
+  const dt = nowMs - state.lastTickMs; state.lastTickMs = nowMs;
+  if (state.paused || isOver(state)) return;
+  state.timeLeftMs -= dt;
+  if (state.timeLeftMs <= 0) { state.timeLeftMs = 0; finish(state, false); }
+}
+function finish(state, won) {
+  state.phase = won ? 'won' : 'lost';
+  state.result = { won, timeLeftMs: state.timeLeftMs, handoffs: state.handoffs, moves: state.moves };
+}
+
+// ---------- actions ----------
+function arrive(state, name, ev) {
+  const an = state.animals[name], c = cellAt(state, an.pos.x, an.pos.y);
+  if (c.kind === 'timer' && !timerUsed(state, c.x, c.y)) {
+    state.timeLeftMs = CONFIG.timerStartMs - state.timeLeftMs;      // flip like a sand timer
+    state.usedTimers.push({ x: c.x, y: c.y });
+    state.actionSets = [state.actionSets[1], state.actionSets[0]];  // role swap
+    state.talkAllowed = true;
+    ev.push({ type: 'flip', timeLeftMs: state.timeLeftMs });
+  }
+  if (state.phase === 'forage' && ANIMALS.every(n => {
+    const a = state.animals[n], k = cellAt(state, a.pos.x, a.pos.y);
+    return !a.escaped && k.kind === 'food' && k.animal === n;
+  })) { state.phase = 'escape'; state.grabbed = true; ev.push({ type: 'grab' }); }
+  if (state.phase === 'escape' && c.kind === 'exit' && !an.escaped) {
+    an.escaped = true; ev.push({ type: 'escape', animal: name });
+    if (ANIMALS.every(n => state.animals[n].escaped)) { finish(state, true); ev.push({ type: 'won' }); }
+  }
+}
+
+function rayPath(from, to) {
+  const dx = Math.sign(to.x - from.x), dy = Math.sign(to.y - from.y), p = [];
+  let x = from.x, y = from.y;
+  while (x !== to.x || y !== to.y) { x += dx; y += dy; p.push({ x, y }); }
+  return p;
+}
+
+function applyAction(state, a) {
+  if (isOver(state)) return { ok: false, reason: 'over', events: [] };
+  const ev = [];
+  const fail = reason => ({ ok: false, reason, events: [] });
+  switch (a.type) {
+    case 'pass': {
+      if (state.ping && state.ping.by !== state.holder) state.ping = null;   // seen, passed back
+      state.holder = 1 - state.holder; state.handoffs++;
+      state.lastHold = state.curHold; state.lastReveal = state.curReveal;
+      state.curHold = []; state.curReveal = [];
+      ev.push({ type: 'pass' });
+      return { ok: true, events: ev };
+    }
+    case 'ping': {
+      if (!cellAt(state, a.at.x, a.at.y)) return fail('nowhere');
+      state.ping = { x: a.at.x, y: a.at.y, by: state.holder };
+      ev.push({ type: 'ping' });
+      return { ok: true, events: ev };
+    }
+    case 'move': case 'climb': case 'burrow': {
+      const an = state.animals[a.animal];
+      if (!an || an.escaped) return fail('animal');
+      if (CONFIG.moveCapPerHold > 0 && state.curHold.length >= CONFIG.moveCapPerHold) return fail('cap');
+      const from = { x: an.pos.x, y: an.pos.y };
+      const targets = legalTargets(state, a.animal);
+      let to;
+      if (a.type === 'move') {
+        if (!a.to) return fail('target');
+        const t = targets.find(t => t.x === a.to.x && t.y === a.to.y && ACT_DIR[t.action]);
+        if (!t) return fail('illegal'); to = t;
+      } else if (a.type === 'climb') {
+        to = targets.find(t => t.action === 'climb'); if (!to) return fail('illegal');
+      } else {
+        if (!a.to) return fail('target');
+        to = targets.find(t => t.action === 'burrow' && t.x === a.to.x && t.y === a.to.y); if (!to) return fail('illegal');
+      }
+      state.talkAllowed = false;
+      an.pos = { x: to.x, y: to.y }; state.moves++;
+      state.curHold.push({ animal: a.animal, path: a.type === 'move' ? [from].concat(rayPath(from, to)) : [from, { x: to.x, y: to.y }] });
+      ev.push({ type: a.type === 'move' ? 'move' : a.type, animal: a.animal, from, to: an.pos });
+      arrive(state, a.animal, ev);
+      return { ok: true, events: ev };
+    }
+    case 'explore': {
+      if (!holderActions(state).includes('explore')) return fail('notheld');
+      const door = exploreDoor(state, a.animal); if (!door) return fail('illegal');
+      const idx = drawTileAt(state, door); if (idx == null) return fail('nodraw');
+      state.talkAllowed = false;
+      state.curReveal.push(idx);
+      ev.push({ type: 'reveal', tile: idx });
+      return { ok: true, events: ev };
+    }
+  }
+  return fail('unknown');
+}
+
+// ---------- tests (run from the console: FM.runTests()) ----------
+function connectedInside(d) {                    // d: {squares, walls, logs}
+  const wall = new Set(d.walls.map(([a, b]) => a + '-' + b));
+  const adj = i => {
+    const r = Math.floor(i / 5), c = i % 5, out = [];
+    [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].forEach(([rr, cc]) => {
+      if (rr < 0 || rr > 4 || cc < 0 || cc > 4) return;
+      const j = rr * 5 + cc;
+      if (d.squares[j].kind !== 'bush' && !wall.has(Math.min(i, j) + '-' + Math.max(i, j))) out.push(j);
+    });
+    d.logs.forEach(([a, b]) => { if (a === i) out.push(b); if (b === i) out.push(a); });
+    return out;
+  };
+  const free = d.squares.map((s, i) => i).filter(i => d.squares[i].kind !== 'bush');
+  const seen = new Set([free[0]]), q = [free[0]];
+  while (q.length) for (const j of adj(q.shift())) if (!seen.has(j)) { seen.add(j); q.push(j); }
+  return seen.size === free.length;
+}
+function reachableCells(state, startKey) {       // ignores animals; logs and same-colour burrows count as links
+  const seen = new Set([startKey]), q = [startKey];
+  const burrows = {};
+  for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'burrow') (burrows[c.animal] = burrows[c.animal] || []).push(k); }
+  while (q.length) {
+    const k = q.shift(), c = state.cells[k], next = [];
+    for (const d of SIDES) { const n = stepFrom(state, c.x, c.y, d); if (n) next.push(key(n.x, n.y)); }
+    const l = state.logs[k]; if (l) next.push(key(l.x, l.y));
+    if (c.kind === 'burrow') next.push(...burrows[c.animal]);
+    for (const n of next) if (!seen.has(n)) { seen.add(n); q.push(n); }
+  }
+  return seen;
+}
+function exploreEverything(state) {              // test helper: ignore animals, open every doorway
+  for (let guard = 0; guard < 100 && state.deck.length; guard++) {
+    const d = doorways(state).find(x => x.status === 'open');
+    if (!d) break;
+    drawTileAt(state, d);
+  }
+}
+
+function runTests(verbose) {
+  const results = [];
+  const test = (name, fn) => { try { fn(); results.push({ name, ok: true }); } catch (e) { results.push({ name, ok: false, err: e.message }); } };
+  const assert = (c, m) => { if (!c) throw new Error(m || 'assertion failed'); };
+  const eq = (a, b, m) => assert(a === b, (m || '') + ' expected ' + b + ' got ' + a);
+  const fresh = (seed, diff) => newGame({ seed: seed == null ? 1 : seed, difficulty: diff || 'normal' });
+
+  test('every tile is connected inside, at every rotation, with walkable doors', () => {
+    for (const id in LIB) for (let k = 0; k < 4; k++) {
+      const rd = rotateDef(LIB[id], k);
+      assert(connectedInside(rd), id + ' rot ' + k + ' is not connected');
+      for (const s in rd.doors) assert(rd.squares[DOOR_IDX[s]].kind !== 'bush', id + ' door on bush');
+    }
+  });
+  test('rotating four times is the identity', () => {
+    for (const id in LIB) for (let i = 0; i < 25; i++) eq(rotIndex(i, 4), i, id);
+  });
+  test('deck: foods, exit in second half, exactly 4 timer squares, deterministic', () => {
+    for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 40; seed++) {
+      const deck = buildDeck(seed, diff), n = CONFIG.tilesPerGame[diff];
+      eq(deck.length, n, 'deck size');
+      eq(new Set(deck).size, n, 'duplicates');
+      FOOD_TILES.forEach(f => assert(deck.includes(f), 'missing ' + f));
+      assert(deck.indexOf('exit') >= Math.floor(n / 2), 'exit too early (' + deck.indexOf('exit') + ' of ' + n + ')');
+      eq(deck.reduce((s, id) => s + LIB[id].timers, 0), CONFIG.timerSquares, 'timers');
+      assert(JSON.stringify(deck) === JSON.stringify(buildDeck(seed, diff)), 'not deterministic');
+    }
+    assert(JSON.stringify(buildDeck(1, 'normal')) !== JSON.stringify(buildDeck(2, 'normal')), 'seeds should differ');
+  });
+  test('start: animals next to their doorways, 4 doors open, no overlap', () => {
+    const s = fresh();
+    const open = doorways(s).filter(d => d.status === 'open'); eq(open.length, 4);
+    ANIMALS.forEach(a => { const c = cellAt(s, s.animals[a].pos.x, s.animals[a].pos.y); assert(c && c.kind === 'plain', a + ' start'); });
+  });
+  test('holder can only use their own directions', () => {
+    const s = fresh();                                    // holder 0: up, left, explore
+    assert(!applyAction(s, { type: 'move', animal: 'rabbit', to: { x: 4, y: 2 } }).ok, 'rabbit right should be refused for set A');
+    assert(applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } }).ok, 'squirrel up should work');
+    applyAction(s, { type: 'pass' });
+    assert(applyAction(s, { type: 'move', animal: 'rabbit', to: { x: 4, y: 2 } }).ok, 'rabbit right works for set B');
+  });
+  test('animals block movement and never share a square', () => {
+    const s = fresh();
+    const t = legalTargets(s, 'bird').filter(x => x.action === 'up');        // bird (2,3) up: (2,2) then squirrel at (2,1)
+    eq(t.length, 1); eq(t[0].x, 2); eq(t[0].y, 2);
+    s.animals.monkey.pos = { x: 2, y: 2 };
+    eq(legalTargets(s, 'bird').filter(x => x.action === 'up').length, 0, 'blocked by monkey');
+  });
+  test('bush and walls block; unexplored edges block', () => {
+    const s = fresh();
+    s.animals.squirrel.pos = { x: 0, y: 1 };                                  // (0,0) is a bush
+    eq(legalTargets(s, 'squirrel').filter(x => x.action === 'up').length, 0, 'bush');
+    s.animals.squirrel.pos = { x: 2, y: 0 };                                  // door, nothing behind it yet
+    eq(legalTargets(s, 'squirrel').filter(x => x.action === 'up').length, 0, 'unexplored');
+    s.walls[wallKey(2, 2, 2, 3)] = 1;
+    s.animals.bird.pos = { x: 2, y: 3 }; s.animals.monkey.pos = { x: 1, y: 1 };
+    eq(legalTargets(s, 'bird').filter(x => x.action === 'up').length, 0, 'wall');
+  });
+  test('explore needs own-colour doorway; places a tile that connects; deck shrinks', () => {
+    const s = fresh(7);
+    assert(!applyAction(s, { type: 'explore', animal: 'squirrel' }).ok, 'not on doorway');
+    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } });
+    const deckBefore = s.deck.length;
+    assert(availableActions(s, 'squirrel').explore, 'should be able to explore');
+    assert(applyAction(s, { type: 'explore', animal: 'squirrel' }).ok, 'explore');
+    eq(s.deck.length, deckBefore - 1); eq(s.tiles.length, 2);
+    assert(legalTargets(s, 'squirrel').some(t => t.action === 'up' && t.y === -1), 'can walk into new tile');
+    assert(!availableActions(s, 'squirrel').explore, 'door is used up');
+    eq(s.curReveal.length, 1);
+  });
+  test('explore is refused for a wrong colour animal', () => {
+    const s = fresh(7);
+    s.animals.monkey.pos = { x: 2, y: 0 };                                    // squirrel's doorway
+    assert(!applyAction(s, { type: 'explore', animal: 'monkey' }).ok);
+  });
+  test('timer square flips the clock once, swaps sets, allows talking', () => {
+    const s = fresh(); tick(s, 0); tick(s, 50000);
+    const left = s.timeLeftMs; eq(left, 130000);
+    s.cells[key(0, 1)].kind = 'timer'; s.animals.squirrel.pos = { x: 1, y: 1 };
+    const r = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
+    assert(r.ok && r.events.some(e => e.type === 'flip'), 'flip');
+    eq(s.timeLeftMs, CONFIG.timerStartMs - left, 'flipped time');
+    eq(s.actionSets[0].includes('down'), true, 'sets swapped');
+    assert(s.talkAllowed, 'talk allowed');
+    s.animals.squirrel.pos = { x: 1, y: 1 };
+    applyAction(s, { type: 'pass' });                                         // set A is now holder 1's
+    assert(s.talkAllowed, 'pass keeps talk time');
+    const r2 = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
+    assert(r2.ok && !r2.events.some(e => e.type === 'flip'), 'used square does nothing');
+    assert(!s.talkAllowed, 'talk ends with the next action');
+  });
+  test('grab happens when all four stand on food; burrows close; exit opens', () => {
+    const s = fresh(3); exploreEverything(s);
+    const foods = {}, exit = [];
+    for (const k in s.cells) { const c = s.cells[k]; if (c.kind === 'food') foods[c.animal] = c; if (c.kind === 'exit') exit.push(c); }
+    ANIMALS.forEach(a => { s.animals[a].pos = { x: foods[a].x, y: foods[a].y }; });
+    const ev = []; arrive(s, 'monkey', ev);
+    assert(ev.some(e => e.type === 'grab') && s.phase === 'escape', 'grab');
+    const b = Object.values(s.cells).find(c => c.kind === 'burrow');
+    eq(effectiveKind(s, b), 'closedBurrow');
+    ANIMALS.forEach((a, i) => {
+      s.animals[a].pos = { x: exit[0].x, y: exit[0].y }; const e2 = []; arrive(s, a, e2);
+      assert(e2.some(e => e.type === 'escape'), a + ' escapes');
+      if (i < 3) eq(s.phase, 'escape'); else eq(s.phase, 'won');
+    });
+    eq(s.result.won, true);
+  });
+  test('a loss during foraging does not look like a grab', () => {
+    const s = fresh(); tick(s, 0); tick(s, CONFIG.timerStartMs + 1);
+    eq(effectiveKind(s, Object.values(s.cells).find(c => c.kind === 'burrow')), 'burrow');
+  });
+  test('standing on food early does nothing; exit is locked before the grab', () => {
+    const s = fresh(3); exploreEverything(s);
+    const f = Object.values(s.cells).find(c => c.kind === 'food' && c.animal === 'rabbit');
+    s.animals.rabbit.pos = { x: f.x, y: f.y }; const ev = []; arrive(s, 'rabbit', ev); eq(ev.length, 0);
+    const x = Object.values(s.cells).find(c => c.kind === 'exit');
+    s.animals.bird.pos = { x: x.x, y: x.y }; arrive(s, 'bird', ev);
+    eq(s.animals.bird.escaped, false, 'cannot escape before grab');
+  });
+  test('burrow: only from own colour burrow, to a free burrow, only before the grab', () => {
+    const s = fresh(5); exploreEverything(s);
+    const mine = Object.values(s.cells).filter(c => c.kind === 'burrow' && c.animal === 'rabbit'); eq(mine.length, CONFIG.burrowsPerAnimal);
+    s.animals.rabbit.pos = { x: mine[0].x, y: mine[0].y };
+    applyAction(s, { type: 'pass' });                                         // set B has burrow
+    assert(availableActions(s, 'rabbit').burrow, 'burrow available');
+    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: s.animals.rabbit.pos.x, y: s.animals.rabbit.pos.y } }).ok, 'not to itself');
+    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'teleport');
+    s.animals.squirrel.pos = { x: mine[1].x, y: mine[1].y }; s.animals.rabbit.pos = { x: mine[0].x, y: mine[0].y };
+    assert(!availableActions(s, 'rabbit').burrow, 'destination occupied');
+    s.animals.squirrel.pos = { x: 1, y: 2 }; s.phase = 'escape';
+    assert(!availableActions(s, 'rabbit').burrow, 'closed after grab');
+  });
+  test('logs: climb to the other end', () => {
+    let s = null;
+    for (let seed = 1; seed < 200 && !s; seed++) { const g = fresh(seed, 'hard'); exploreEverything(g); if (g.logList.length) s = g; }
+    assert(s, 'a log should appear in some game');
+    const [ax, ay, bx, by] = s.logList[0];
+    ANIMALS.forEach((a, i) => { s.animals[a].pos = { x: -50 - i, y: -50 }; });
+    s.animals.squirrel.pos = { x: ax, y: ay }; applyAction(s, { type: 'pass' });
+    assert(availableActions(s, 'squirrel').climb, 'climb available');
+    assert(applyAction(s, { type: 'climb', animal: 'squirrel' }).ok, 'climb');
+    eq(s.animals.squirrel.pos.x, bx); eq(s.animals.squirrel.pos.y, by);
+  });
+  test('timer runs from timestamps and ends the game; pause stops it', () => {
+    const s = fresh(); tick(s, 1000); tick(s, 2000); eq(s.timeLeftMs, CONFIG.timerStartMs - 1000);
+    s.paused = true; tick(s, 12000); eq(s.timeLeftMs, CONFIG.timerStartMs - 1000, 'paused');
+    s.paused = false; tick(s, 12000 + CONFIG.timerStartMs + 5);
+    eq(s.phase, 'lost'); eq(s.timeLeftMs, 0);
+    assert(!applyAction(s, { type: 'pass' }).ok, 'no actions after the end');
+  });
+  test('ping: replaced by a new one, seen by the next holder, cleared when passed back', () => {
+    const s = fresh();
+    applyAction(s, { type: 'ping', at: { x: 1, y: 1 } }); applyAction(s, { type: 'ping', at: { x: 3, y: 3 } });
+    eq(s.ping.x, 3); applyAction(s, { type: 'pass' }); assert(s.ping, 'next holder sees it');
+    applyAction(s, { type: 'pass' }); assert(!s.ping, 'gone after passing back');
+  });
+  test('catch-up: previous hold is recorded and tiles revealed are tracked', () => {
+    const s = fresh(2);
+    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } });
+    applyAction(s, { type: 'explore', animal: 'squirrel' });
+    applyAction(s, { type: 'pass' });
+    eq(s.lastHold.length, 1); eq(s.lastHold[0].path.length, 2); eq(s.lastReveal.length, 1);
+    eq(s.handoffs, 1); eq(s.curHold.length, 0);
+  });
+  test('move cap per hold', () => {
+    const old = CONFIG.moveCapPerHold; CONFIG.moveCapPerHold = 1;
+    try {
+      const s = fresh(); assert(applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } }).ok);
+      assert(!applyAction(s, { type: 'move', animal: 'monkey', to: { x: 0, y: 2 } }).ok, 'cap reached');
+    } finally { CONFIG.moveCapPerHold = old; }
+  });
+  test('generator: same seed gives the same map when explored the same way', () => {
+    const a = fresh(11), b = fresh(11); exploreEverything(a); exploreEverything(b);
+    eq(JSON.stringify(a.tiles.map(t => [t.def.id, t.rotation, t.tx, t.ty])), JSON.stringify(b.tiles.map(t => [t.def.id, t.rotation, t.tx, t.ty])));
+  });
+  test('generator guarantees: whole deck placed, tiles never overlap, everything reachable (all difficulties, many seeds)', () => {
+    for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 60; seed++) {
+      const s = fresh(seed, diff); exploreEverything(s);
+      eq(s.deck.length, 0, diff + ' seed ' + seed + ' deck not emptied');
+      eq(s.tiles.length, CONFIG.tilesPerGame[diff] + 1);
+      eq(Object.keys(s.lattice).length, s.tiles.length, 'overlap');
+      const reach = reachableCells(s, key(START_POS.squirrel[1], START_POS.squirrel[0]));
+      for (const k in s.cells) { const c = s.cells[k]; if (c.kind !== 'bush') assert(reach.has(k), diff + ' seed ' + seed + ': unreachable ' + c.kind + ' at ' + k); }
+    }
+  });
+  test('generator: while tiles remain an open doorway always exists (exploring through random doors)', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const s = fresh(seed, 'hard'); const rng = mulberry32(seed);
+      while (s.deck.length) {
+        const open = doorways(s).filter(d => d.status === 'open');
+        assert(open.length > 0, 'seed ' + seed + ' ran out of open doorways with ' + s.deck.length + ' tiles left');
+        drawTileAt(s, open[Math.floor(rng() * open.length)]);
+      }
+    }
+  });
+  test('closed doorways once the deck is empty', () => {
+    const s = fresh(4, 'easy'); exploreEverything(s);
+    eq(doorways(s).filter(d => d.status === 'open').length, 0);
+  });
+
+  const failed = results.filter(r => !r.ok);
+  if (typeof console !== 'undefined') {
+    results.forEach(r => (verbose !== false || !r.ok) && console.log((r.ok ? '✓ ' : '✗ ') + r.name + (r.ok ? '' : '\n    ' + r.err)));
+    console.log(failed.length ? failed.length + ' of ' + results.length + ' tests FAILED' : 'All ' + results.length + ' tests passed');
+  }
+  return { passed: results.length - failed.length, failed: failed.length, results };
+}
+
+const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick, applyAction, legalTargets, availableActions,
+  exploreDoor, doorways, cellAt, animalAt, effectiveKind, timerUsed, isOver, holderActions, arrive, runTests, hashStr, mulberry32 };
+// ===== LOGIC END =====
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+(function () {
+  if (typeof document === 'undefined') return;
+  const $ = id => document.getElementById(id);
+  const MINZ = 10, MAXZ = 130;
+  const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+
+  // ---------- storage ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('forestmaze.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('forestmaze.' + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
+  };
+  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '' }, store.get('settings', {}));
+  const saveSettings = () => store.set('settings', settings);
+
+  // ---------- sound & vibration ----------
+  let actx = null;
+  function tone(freq, dur, wave, vol, delay) {
+    if (!settings.sound) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const t0 = actx.currentTime + (delay || 0), o = actx.createOscillator(), g = actx.createGain();
+      o.type = wave || 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol || 0.12, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch (e) { /* ignore */ }
+  }
+  const buzz = p => { if (settings.vibration && navigator.vibrate) try { navigator.vibrate(p); } catch (e) { /* ignore */ } };
+  const SFX = {
+    move() { tone(440, .07, 'triangle', .08); },
+    select() { tone(660, .05, 'sine', .06); },
+    reveal() { tone(392, .1, 'triangle'); tone(523, .1, 'triangle', .12, .09); tone(659, .16, 'triangle', .12, .18); buzz(20); },
+    flip() { tone(700, .15, 'square', .08); tone(350, .25, 'square', .08, .14); buzz([60, 40, 60]); },
+    grab() { [523, 659, 784, 1046].forEach((f, i) => tone(f, .18, 'triangle', .14, i * .1)); buzz([80, 40, 80, 40, 160]); },
+    escape() { tone(880, .12, 'sine', .12); tone(1175, .18, 'sine', .12, .1); buzz(40); },
+    win() { [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, .25, 'triangle', .14, i * .12)); buzz([100, 50, 100, 50, 250]); },
+    lose() { [330, 262, 196].forEach((f, i) => tone(f, .35, 'sawtooth', .1, i * .2)); buzz(400); },
+    pass() { tone(300, .08, 'sine', .08); tone(450, .1, 'sine', .08, .07); buzz(25); },
+    ping() { tone(900, .12, 'sine', .08); buzz(15); },
+    tick() { tone(1000, .04, 'square', .05); },
+    bad() { tone(160, .12, 'square', .06); },
+  };
+
+  // ---------- wake lock ----------
+  let wake = null;
+  async function requestWake() { try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch (e) { /* ignore */ } }
+  function releaseWake() { try { if (wake) wake.release(); } catch (e) { /* ignore */ } wake = null; }
+
+  // ---------- screens ----------
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+    if (id === 'game') requestAnimationFrame(resize);
+  }
+  const bestOf = d => store.get('best', {})[d];
+  function randomSeed() { return 100000 + Math.floor(Math.random() * 900000); }
+  function parseSeed(str) {
+    str = (str || '').trim(); if (!str) return randomSeed();
+    return /^\d{1,9}$/.test(str) ? parseInt(str, 10) : FM.hashStr(str);
+  }
+  const fmt = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+  // ---------- game session ----------
+  const G = {
+    state: null, selected: null, burrowMode: false, ended: false, last: 0,
+    cam: { x: 2.5, y: 2.5, z: 50 }, goal: null, anim: {}, trailUntil: 0,
+    W: 0, H: 0, dpr: 1, arrows: [], barKey: '', trackKey: '', lastSec: -1, doorCache: null, doorKey: '',
+  };
+  FM.ui = G;
+  const cv = $('cv'), ctx = cv.getContext('2d');
+
+  function startGame(difficulty, seed) {
+    G.state = FM.newGame({ difficulty, seed });
+    G.state.paused = true;
+    Object.assign(G, { selected: null, burrowMode: false, ended: false, goal: null, trailUntil: 0, barKey: '', trackKey: '', lastSec: -1, doorCache: null, anim: {}, doorKey: '' });
+    show('game');
+    requestAnimationFrame(() => { resize(); G.cam.z = Math.min(G.W, G.H) / 6.8; G.cam.x = 2.5; G.cam.y = 2.5; });
+    FM.ANIMALS.forEach(a => { G.anim[a] = { x: G.state.animals[a].pos.x, y: G.state.animals[a].pos.y }; });
+    overlay('<h2>Ready?</h2><p>Player 1 holds the phone first. The clock starts when you tap Start.</p><button class="big" id="ovGo">Start</button><button class="big alt" id="ovQuit">Quit</button>');
+    $('ovGo').onclick = () => { closeOverlay(); G.state.paused = false; G.state.lastTickMs = performance.now(); requestWake(); };
+    $('ovQuit').onclick = quitGame;
+  }
+  function quitGame() { closeOverlay(); G.state = null; releaseWake(); show('title'); }
+  function overlay(html) { const o = $('overlay'); o.innerHTML = html; o.classList.add('show'); }
+  function closeOverlay() { $('overlay').classList.remove('show'); }
+
+  function pauseGame() {
+    const st = G.state; if (!st || FM.isOver(st) || st.paused) return;
+    st.paused = true;
+    overlay('<h2>Paused</h2><p>The clock is stopped.</p><button class="big" id="ovGo">Resume</button><button class="big alt" id="ovQuit">Quit game</button>');
+    $('ovGo').onclick = () => { closeOverlay(); st.paused = false; st.lastTickMs = performance.now(); requestWake(); };
+    $('ovQuit').onclick = quitGame;
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if ($('game').classList.contains('active')) pauseGame(); }
+    else if (G.state && !G.state.paused) requestWake();
+  });
+
+  // ---------- toast ----------
+  let toastTimer = 0;
+  function toast(msg, ms) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms || 1800);
+  }
+
+  // ---------- performing actions ----------
+  function act(a) {
+    const st = G.state; if (!st || st.paused) return { ok: false };
+    FM.tick(st, performance.now());
+    const res = FM.applyAction(st, a);
+    if (!res.ok) { SFX.bad(); return res; }
+    G.trailUntil = 0;
+    for (const e of res.events) {
+      if (e.type === 'move' || e.type === 'climb' || e.type === 'burrow') SFX.move();
+      if (e.type === 'ping') SFX.ping();
+      if (e.type === 'reveal') { SFX.reveal(); focusNewTile(e.tile); }
+      if (e.type === 'flip') { SFX.flip(); toast('⏳ Timer flipped! ' + fmt(e.timeLeftMs) + ' left. Roles swapped.', 2600); }
+      if (e.type === 'grab') { SFX.grab(); toast('🎉 Food grabbed! Burrows closed. To the exit!', 2800); }
+      if (e.type === 'escape') { SFX.escape(); }
+      if (e.type === 'pass') {
+        SFX.pass(); G.selected = null; G.trailUntil = performance.now() + FM.CONFIG.trailMs;
+        if (st.ping) G.goal = { x: st.ping.x + .5, y: st.ping.y + .5 };
+      }
+    }
+    G.burrowMode = false; G.barKey = '';
+    return res;
+  }
+
+  function focusNewTile(idx) {
+    const t = G.state.tiles[idx], cx = t.tx * 5 + 2.5, cy = t.ty * 5 + 2.5, s = w2s(cx, cy), m = 40;
+    if (s.x < m || s.y < m || s.x > G.W - m || s.y > G.H - m) G.goal = { x: cx, y: cy };
+  }
+
+  // ---------- camera ----------
+  const w2s = (x, y) => ({ x: (x - G.cam.x) * G.cam.z + G.W / 2, y: (y - G.cam.y) * G.cam.z + G.H / 2 });
+  const s2w = (x, y) => ({ x: (x - G.W / 2) / G.cam.z + G.cam.x, y: (y - G.H / 2) / G.cam.z + G.cam.y });
+  function bounds() {
+    let a = 1e9, b = 1e9, c = -1e9, d = -1e9;
+    for (const t of G.state.tiles) { a = Math.min(a, t.tx * 5); b = Math.min(b, t.ty * 5); c = Math.max(c, t.tx * 5 + 5); d = Math.max(d, t.ty * 5 + 5); }
+    return { minx: a, miny: b, maxx: c, maxy: d };
+  }
+  function clampCam() {
+    const b = bounds(), m = 3;
+    G.cam.x = Math.max(b.minx - m, Math.min(b.maxx + m, G.cam.x));
+    G.cam.y = Math.max(b.miny - m, Math.min(b.maxy + m, G.cam.y));
+    G.cam.z = Math.max(MINZ, Math.min(MAXZ, G.cam.z));
+  }
+  function fitCamera() {
+    const b = bounds(), w = b.maxx - b.minx + 1.5, h = b.maxy - b.miny + 1.5;
+    G.goal = { x: (b.minx + b.maxx) / 2, y: (b.miny + b.maxy) / 2, z: Math.max(MINZ, Math.min(MAXZ, Math.min(G.W / w, G.H / h))) };
+  }
+  function zoomAt(sx, sy, factor) {
+    const before = s2w(sx, sy);
+    G.cam.z = Math.max(MINZ, Math.min(MAXZ, G.cam.z * factor));
+    const after = s2w(sx, sy);
+    G.cam.x += before.x - after.x; G.cam.y += before.y - after.y;
+    clampCam();
+  }
+  function resize() {
+    const r = $('stage').getBoundingClientRect();
+    G.dpr = Math.min(window.devicePixelRatio || 1, 3); G.W = r.width; G.H = r.height;
+    cv.width = Math.max(1, Math.round(r.width * G.dpr)); cv.height = Math.max(1, Math.round(r.height * G.dpr));
+  }
+  window.addEventListener('resize', resize);
+
+  // ---------- input ----------
+  const ptrs = new Map();
+  let pinch = null, lpTimer = 0, longFired = false;
+  const posOf = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  cv.addEventListener('pointerdown', e => {
+    if (!G.state || G.state.paused) return;
+    cv.setPointerCapture(e.pointerId);
+    const p = posOf(e); ptrs.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false });
+    G.trailUntil = 0; G.goal = null; longFired = false; clearTimeout(lpTimer);
+    if (ptrs.size === 1) {
+      lpTimer = setTimeout(() => {
+        const q = ptrs.get(e.pointerId); if (!q || q.moved || ptrs.size !== 1) return;
+        longFired = true; const w = s2w(q.x, q.y); act({ type: 'ping', at: { x: Math.floor(w.x), y: Math.floor(w.y) } });
+      }, 450);
+    } else if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: G.cam.z };
+      ptrs.forEach(q => { q.moved = true; });
+    }
+  });
+  cv.addEventListener('pointermove', e => {
+    const q = ptrs.get(e.pointerId); if (!q) return;
+    const p = posOf(e), dx = p.x - q.x, dy = p.y - q.y;
+    q.x = p.x; q.y = p.y;
+    if (ptrs.size === 1) {
+      if (!q.moved && Math.hypot(p.x - q.sx, p.y - q.sy) > 8) { q.moved = true; clearTimeout(lpTimer); }
+      if (q.moved) { G.cam.x -= dx / G.cam.z; G.cam.y -= dy / G.cam.z; clampCam(); }
+    } else if (ptrs.size === 2 && pinch) {
+      const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      zoomAt(cx, cy, (pinch.z * d / pinch.d) / G.cam.z);
+      G.cam.x -= (dx / 2) / G.cam.z; G.cam.y -= (dy / 2) / G.cam.z; clampCam();
+    }
+  });
+  function endPtr(e) {
+    const q = ptrs.get(e.pointerId); if (!q) return;
+    clearTimeout(lpTimer);
+    const wasTap = ptrs.size === 1 && !q.moved && !longFired && e.type === 'pointerup';
+    ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+    if (wasTap) onTap(q.x, q.y);
+  }
+  cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+  cv.addEventListener('wheel', e => { e.preventDefault(); const p = posOf(e); G.goal = null; zoomAt(p.x, p.y, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+
+  function onTap(sx, sy) {
+    const st = G.state; if (!st || st.paused) return;
+    for (const a of G.arrows) if (Math.hypot(sx - a.x, sy - a.y) < a.r + 6) {       // off-screen animal arrows
+      const an = st.animals[a.name]; G.goal = { x: an.pos.x + .5, y: an.pos.y + .5 }; SFX.select(); return;
+    }
+    const w = s2w(sx, sy), sq = { x: Math.floor(w.x), y: Math.floor(w.y) };
+    const targets = G.selected ? FM.legalTargets(st, G.selected) : [];
+    if (G.burrowMode) {
+      const t = targets.find(t => t.action === 'burrow' && t.x === sq.x && t.y === sq.y);
+      if (t) act({ type: 'burrow', animal: G.selected, to: sq }); else { G.burrowMode = false; G.barKey = ''; }
+      return;
+    }
+    const who = FM.animalAt(st, sq.x, sq.y);
+    if (who) { G.selected = G.selected === who ? null : who; G.barKey = ''; SFX.select(); return; }
+    if (G.selected) {
+      const t = targets.find(t => t.x === sq.x && t.y === sq.y && FM.ACT_DIR[t.action]);
+      if (t) act({ type: 'move', animal: G.selected, to: sq }); else { G.selected = null; G.barKey = ''; }
+    }
+  }
+
+  // ---------- HUD ----------
+  const ACT_UI = { up: ['⬆️', 'Up'], down: ['⬇️', 'Down'], left: ['⬅️', 'Left'], right: ['➡️', 'Right'], explore: ['🧭', 'Explore'], climb: ['🪵', 'Climb'], burrow: ['🕳️', 'Burrow'] };
+  function updateHud() {
+    const st = G.state;
+    document.body.className = 'p' + st.holder;
+    const timer = $('timer'); timer.textContent = fmt(st.timeLeftMs);
+    const warn = st.timeLeftMs < FM.CONFIG.warnMs && !FM.isOver(st);
+    timer.classList.toggle('warn', warn);
+    const sec = Math.ceil(st.timeLeftMs / 1000);
+    if (warn && !st.paused && sec !== G.lastSec) SFX.tick();
+    G.lastSec = sec;
+    const acts = FM.holderActions(st);
+    $('who').textContent = 'Player ' + (st.holder + 1) + ' · ' + acts.map(a => ACT_UI[a][1]).join(' · ');
+    $('banner').style.display = st.talkAllowed ? 'block' : 'none';
+
+    // action bar
+    const av = G.selected ? FM.availableActions(st, G.selected) : {};
+    const k = [st.holder, acts.join(), G.selected, av.explore, av.climb, av.burrow, G.burrowMode].join('|');
+    if (k !== G.barKey) {
+      G.barKey = k;
+      const box = $('actions'); box.innerHTML = '';
+      acts.forEach(a => {
+        const d = document.createElement('div'), isBtn = a === 'explore' || a === 'climb' || a === 'burrow';
+        d.className = 'chip' + (isBtn ? ' btn' : '') + (isBtn && av[a] ? ' lit' : '') + (a === 'burrow' && G.burrowMode ? ' armed' : '');
+        d.innerHTML = '<span class="ic">' + ACT_UI[a][0] + '</span><small>' + ACT_UI[a][1] + '</small>';
+        if (isBtn) d.onclick = () => {
+          if (!G.selected) { toast('Tap an animal first', 1200); SFX.bad(); return; }
+          if (!av[a]) { toast(a === 'explore' ? 'Stand on a doorway of its own colour' : a === 'climb' ? 'Stand on the end of a log' : 'Stand on a burrow of its colour', 1500); SFX.bad(); return; }
+          if (a === 'burrow') { G.burrowMode = !G.burrowMode; G.barKey = ''; toast('Tap a burrow to jump to', 1300); } else act({ type: a, animal: G.selected });
+        };
+        box.appendChild(d);
+      });
+    }
+
+    // food tracker
+    const tk = FM.ANIMALS.map(n => {
+      const an = st.animals[n], c = FM.cellAt(st, an.pos.x, an.pos.y);
+      return an.escaped ? 'out' : (st.phase === 'forage' ? (c.kind === 'food' && c.animal === n ? 'lit' : 'dim') : 'lit');
+    }).join();
+    if (tk !== G.trackKey) {
+      G.trackKey = tk; const states = tk.split(',');
+      $('tracker').innerHTML = FM.ANIMALS.map((n, i) => '<div class="fi ' + (states[i] === 'dim' ? '' : states[i]) + '" style="--c:' + FM.INFO[n].color + '">' +
+        (states[i] === 'out' ? FM.INFO[n].emoji + '✅' : FM.INFO[n].emoji + FM.INFO[n].food) + '</div>').join('');
+    }
+  }
+
+  // ---------- drawing ----------
+  function doorList() {
+    const st = G.state, k = st.tiles.length + ':' + st.deck.length;
+    if (G.doorKey !== k) { G.doorCache = FM.doorways(st); G.doorKey = k; }
+    return G.doorCache;
+  }
+  function emoji(ch, cx, cy, size, alpha) {
+    ctx.save(); if (alpha != null) ctx.globalAlpha = alpha;
+    ctx.font = (size * G.cam.z) + 'px ' + EMOJI_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const s = w2s(cx, cy); ctx.fillText(ch, s.x, s.y + size * G.cam.z * 0.06); ctx.restore();
+  }
+  function rect(x, y, w, h) { const a = w2s(x, y); ctx.fillRect(a.x, a.y, w * G.cam.z, h * G.cam.z); }
+  function circle(cx, cy, r, mode) { const s = w2s(cx, cy); ctx.beginPath(); ctx.arc(s.x, s.y, r * G.cam.z, 0, 7); if (mode === 'stroke') ctx.stroke(); else ctx.fill(); }
+  function line(x1, y1, x2, y2) { const a = w2s(x1, y1), b = w2s(x2, y2); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  function edgeSeg(ax, ay, bx, by) {                    // line along the edge between adjacent squares a and b
+    if (ax === bx) { const y = Math.max(ay, by); return [ax, y, ax + 1, y]; }
+    const x = Math.max(ax, bx); return [x, ay, x, ay + 1];
+  }
+  const SIDE_SEG = { N: (x, y) => [x, y, x + 1, y], S: (x, y) => [x, y + 1, x + 1, y + 1], W: (x, y) => [x, y, x, y + 1], E: (x, y) => [x + 1, y, x + 1, y + 1] };
+
+  function draw(now) {
+    const st = G.state, z = G.cam.z, W = G.W, H = G.H, ph = st.phase;
+    ctx.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
+    ctx.fillStyle = '#14281c'; ctx.fillRect(0, 0, W, H);
+    const vis = (x, y, w, h) => { const a = w2s(x, y); return a.x < W && a.y < H && a.x + w * z > 0 && a.y + h * z > 0; };
+    const doors = doorList();
+    const pulse = 0.5 + 0.5 * Math.sin(now / 280);
+
+    // ghost cells behind open doorways
+    for (const d of doors) if (d.status === 'open' && vis(d.nx * 5, d.ny * 5, 5, 5)) {
+      const col = FM.INFO[d.animal].color, a = w2s(d.nx * 5 + .15, d.ny * 5 + .15);
+      ctx.save(); ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.strokeStyle = col; ctx.globalAlpha = .45 + .25 * pulse;
+      ctx.lineWidth = Math.max(2, z * .06); ctx.setLineDash([z * .25, z * .2]);
+      ctx.beginPath(); ctx.roundRect(a.x, a.y, 4.7 * z, 4.7 * z, z * .3); ctx.fill(); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = '#fff'; emoji('❓', d.nx * 5 + 2.5, d.ny * 5 + 2.5, 1.4, .35);
+    }
+
+    // squares
+    st.tiles.forEach((t, ti) => {
+      if (!vis(t.tx * 5, t.ty * 5, 5, 5)) return;
+      const glow = now < G.trailUntil && st.lastReveal.includes(ti);
+      for (let i = 0; i < 25; i++) {
+        const x = t.tx * 5 + (i % 5), y = t.ty * 5 + Math.floor(i / 5), c = FM.cellAt(st, x, y);
+        ctx.fillStyle = ((x + y) & 1) ? '#bfe0a6' : '#b3d79a'; rect(x, y, 1, 1);
+        const k = FM.effectiveKind(st, c);
+        if (c.kind === 'bush') {
+          ctx.fillStyle = '#2d6b39'; circle(x + .5, y + .52, .46); ctx.fillStyle = '#3f8c4a'; circle(x + .42, y + .42, .3);
+          ctx.fillStyle = '#58a85a'; circle(x + .34, y + .34, .12);
+        } else if (k === 'food') {
+          ctx.fillStyle = FM.INFO[c.animal].color; ctx.globalAlpha = .35; circle(x + .5, y + .5, .44); ctx.globalAlpha = 1;
+          ctx.strokeStyle = FM.INFO[c.animal].color; ctx.lineWidth = Math.max(2, z * .06); circle(x + .5, y + .5, .44, 'stroke');
+          emoji(FM.INFO[c.animal].food, x + .5, y + .5, .62);
+        } else if (k === 'burrow' || k === 'closedBurrow') {
+          const col = FM.INFO[c.animal].color;
+          ctx.fillStyle = k === 'burrow' ? '#3b2a1a' : '#6b5a48'; circle(x + .5, y + .55, .36);
+          ctx.strokeStyle = k === 'burrow' ? col : '#999'; ctx.lineWidth = Math.max(2, z * .09); circle(x + .5, y + .55, .38, 'stroke');
+          if (k === 'closedBurrow') { ctx.strokeStyle = '#555'; ctx.lineWidth = Math.max(1.5, z * .06); line(x + .3, y + .35, x + .7, y + .75); line(x + .7, y + .35, x + .3, y + .75); }
+        } else if (k === 'lockedExit' || k === 'exit') {
+          ctx.fillStyle = k === 'exit' ? 'rgba(255,255,255,.65)' : 'rgba(80,80,80,.35)'; rect(x + .05, y + .05, .9, .9);
+          ctx.strokeStyle = k === 'exit' ? '#1faa59' : '#666'; ctx.lineWidth = Math.max(2, z * .07); const a = w2s(x + .05, y + .05); ctx.strokeRect(a.x, a.y, .9 * z, .9 * z);
+          emoji('🚪', x + .5, y + .5, .65, k === 'exit' ? 1 : .55);
+          if (k === 'lockedExit') emoji('🔒', x + .78, y + .78, .32);
+          else { ctx.strokeStyle = '#1faa59'; ctx.globalAlpha = pulse; circle(x + .5, y + .5, .55 + .1 * pulse, 'stroke'); ctx.globalAlpha = 1; }
+        } else if (k === 'timer') {
+          ctx.fillStyle = 'rgba(255,217,102,.85)'; circle(x + .5, y + .5, .42); emoji('⏳', x + .5, y + .5, .6);
+        } else if (k === 'usedTimer') {
+          ctx.fillStyle = 'rgba(120,120,120,.35)'; circle(x + .5, y + .5, .4); emoji('⏳', x + .5, y + .5, .5, .35);
+          ctx.strokeStyle = '#555'; ctx.lineWidth = Math.max(1.5, z * .06); line(x + .25, y + .25, x + .75, y + .75); line(x + .75, y + .25, x + .25, y + .75);
+        }
+      }
+      if (glow) {
+        ctx.save(); ctx.strokeStyle = '#fff176'; ctx.lineWidth = Math.max(3, z * .12); ctx.globalAlpha = .5 + .5 * pulse;
+        const a = w2s(t.tx * 5, t.ty * 5); ctx.strokeRect(a.x, a.y, 5 * z, 5 * z); ctx.restore();
+      }
+    });
+
+    // logs
+    for (const [ax, ay, bx, by] of G.state.logList) {
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#6b4423'; ctx.lineWidth = Math.max(4, z * .26); line(ax + .5, ay + .5, bx + .5, by + .5);
+      ctx.strokeStyle = '#a9743f'; ctx.lineWidth = Math.max(2, z * .14); line(ax + .5, ay + .5, bx + .5, by + .5);
+      for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.fillStyle = '#d2a064'; circle(x + .5, y + .5, .2); ctx.strokeStyle = '#6b4423'; ctx.lineWidth = Math.max(1.5, z * .05); circle(x + .5, y + .5, .2, 'stroke'); circle(x + .5, y + .5, .09, 'stroke'); }
+    }
+
+    // fences inside tiles
+    ctx.lineCap = 'round';
+    for (const [ax, ay, bx, by] of st.wallList) {
+      const [x1, y1, x2, y2] = edgeSeg(ax, ay, bx, by);
+      ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = Math.max(3, z * .15); line(x1, y1, x2, y2);
+      ctx.strokeStyle = '#a77a45'; ctx.lineWidth = Math.max(1.5, z * .07); line(x1, y1, x2, y2);
+    }
+    // tile borders: fence everywhere, except where doorways connect
+    st.tiles.forEach((t, ti) => {
+      if (!vis(t.tx * 5, t.ty * 5, 5, 5)) return;
+      const x0 = t.tx * 5, y0 = t.ty * 5;
+      const doorHere = {}; doors.filter(d => d.tile === ti).forEach(d => { doorHere[d.side] = d; });
+      for (const side of FM.SIDES) {
+        for (let n = 0; n < 5; n++) {
+          const x = side === 'N' || side === 'S' ? x0 + n : (side === 'W' ? x0 : x0 + 4);
+          const y = side === 'W' || side === 'E' ? y0 + n : (side === 'N' ? y0 : y0 + 4);
+          const d = doorHere[side], isDoorSq = d && x === d.x && y === d.y;
+          if (isDoorSq && d.status === 'linked') continue;
+          const [x1, y1, x2, y2] = SIDE_SEG[side](x, y);
+          ctx.strokeStyle = '#3d2c18'; ctx.lineWidth = Math.max(3, z * .13); line(x1, y1, x2, y2);
+          ctx.strokeStyle = '#8a6a43'; ctx.lineWidth = Math.max(1.5, z * .05); line(x1, y1, x2, y2);
+        }
+      }
+      // doorway markers
+      for (const d of Object.values(doorHere)) {
+        const col = FM.INFO[d.animal].color, [x1, y1, x2, y2] = SIDE_SEG[d.side](d.x, d.y);
+        if (d.status === 'linked') {
+          ctx.fillStyle = col; const mx = (x1 + x2) / 2, my = (y1 + y2) / 2; circle(mx, my, .1);
+        } else if (d.status === 'open') {
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(5, z * .22); line(x1, y1, x2, y2);
+          ctx.strokeStyle = col; ctx.lineWidth = Math.max(3, z * .14); line(x1, y1, x2, y2);
+          ctx.fillStyle = col; ctx.globalAlpha = .3 + .4 * pulse; circle((x1 + x2) / 2, (y1 + y2) / 2, .3 + .1 * pulse); ctx.globalAlpha = 1;
+        } else {
+          ctx.strokeStyle = '#555'; ctx.lineWidth = Math.max(4, z * .16); line(x1, y1, x2, y2);
+        }
+      }
+    });
+    ctx.lineCap = 'butt';
+
+    // catch-up trails
+    if (now < G.trailUntil) {
+      const fade = Math.min(1, (G.trailUntil - now) / 700);
+      ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.globalAlpha = .85 * fade;
+      for (const h of st.lastHold) {
+        ctx.strokeStyle = FM.INFO[h.animal].color; ctx.lineWidth = Math.max(3, z * .12); ctx.setLineDash([z * .02, z * .2]);
+        ctx.beginPath(); h.path.forEach((p, i) => { const s = w2s(p.x + .5, p.y + .5); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); }); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // reachable squares of the selected animal
+    if (G.selected && !st.paused) {
+      const col = FM.INFO[G.selected].color;
+      for (const t of FM.legalTargets(st, G.selected)) {
+        if (G.burrowMode ? t.action !== 'burrow' : !FM.ACT_DIR[t.action]) continue;
+        const c = FM.cellAt(st, t.x, t.y);
+        ctx.fillStyle = 'rgba(255,255,255,.55)'; circle(t.x + .5, t.y + .5, G.burrowMode ? .45 : .2);
+        ctx.strokeStyle = col; ctx.lineWidth = Math.max(2, z * .06);
+        circle(t.x + .5, t.y + .5, (G.burrowMode ? .45 : .2) + (G.burrowMode ? .08 * pulse : 0), 'stroke');
+        if (!G.burrowMode && c.kind === 'exit' && st.phase === 'escape') { ctx.strokeStyle = '#1faa59'; circle(t.x + .5, t.y + .5, .42, 'stroke'); }
+      }
+    }
+
+    // ping
+    if (st.ping) {
+      const holderCol = getComputedStyle(document.body).getPropertyValue('--holder') || '#fff';
+      for (let n = 0; n < 2; n++) {
+        const ph2 = ((now / 900) + n * .5) % 1;
+        ctx.strokeStyle = n ? '#fff' : holderCol.trim(); ctx.globalAlpha = 1 - ph2; ctx.lineWidth = Math.max(3, z * .1);
+        circle(st.ping.x + .5, st.ping.y + .5, .3 + ph2 * .9, 'stroke');
+      }
+      ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; circle(st.ping.x + .5, st.ping.y + .5, .1);
+    }
+
+    // animals
+    for (const n of FM.ANIMALS) {
+      const an = st.animals[n]; if (an.escaped) continue;
+      const p = G.anim[n], sel = G.selected === n, r = sel ? .5 : .43;
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; circle(p.x + .5, p.y + .58, r);
+      ctx.fillStyle = FM.INFO[n].color; circle(p.x + .5, p.y + .5, r);
+      ctx.strokeStyle = sel ? '#fff' : 'rgba(0,0,0,.35)'; ctx.lineWidth = Math.max(2, z * (sel ? .1 : .05)); circle(p.x + .5, p.y + .5, r, 'stroke');
+      emoji(FM.INFO[n].emoji, p.x + .5, p.y + .5, sel ? .78 : .68);
+    }
+
+    // arrows to animals that are off screen
+    G.arrows = [];
+    const m = 26;
+    for (const n of FM.ANIMALS) {
+      const an = st.animals[n]; if (an.escaped) continue;
+      const s = w2s(G.anim[n].x + .5, G.anim[n].y + .5);
+      if (s.x >= m * .6 && s.x <= W - m * .6 && s.y >= m * .6 && s.y <= H - m * .6) continue;
+      const cx = W / 2, cy = H / 2, dx = s.x - cx, dy = s.y - cy;
+      const k = Math.min((W / 2 - m) / Math.abs(dx || 1e-6), (H / 2 - m) / Math.abs(dy || 1e-6));
+      const bx = cx + dx * k, by = cy + dy * k, ang = Math.atan2(dy, dx);
+      G.arrows.push({ name: n, x: bx, y: by, r: 18 });
+      ctx.save(); ctx.translate(bx, by);
+      ctx.fillStyle = FM.INFO[n].color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(0, 0, 18, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.rotate(ang); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(17, -7); ctx.lineTo(17, 7); ctx.fill(); ctx.rotate(-ang);
+      ctx.font = '20px ' + EMOJI_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(FM.INFO[n].emoji, 0, 1);
+      ctx.restore();
+    }
+  }
+
+  // ---------- main loop ----------
+  function frame(now) {
+    const dt = Math.min(0.1, (now - (G.last || now)) / 1000); G.last = now;
+    if (G.state && $('game').classList.contains('active')) {
+      const st = G.state;
+      FM.tick(st, performance.now());
+      const k = 1 - Math.exp(-dt * 16);
+      for (const n of FM.ANIMALS) { const p = G.anim[n], t = st.animals[n].pos; p.x += (t.x - p.x) * k; p.y += (t.y - p.y) * k; }
+      if (G.goal && !ptrs.size) {
+        const kk = 1 - Math.exp(-dt * 7);
+        G.cam.x += (G.goal.x - G.cam.x) * kk; G.cam.y += (G.goal.y - G.cam.y) * kk;
+        if (G.goal.z) G.cam.z += (G.goal.z - G.cam.z) * kk;
+        if (Math.abs(G.goal.x - G.cam.x) < .01 && Math.abs(G.goal.y - G.cam.y) < .01 && (!G.goal.z || Math.abs(G.goal.z - G.cam.z) < .2)) G.goal = null;
+      }
+      if (G.selected && st.animals[G.selected].escaped) { G.selected = null; G.barKey = ''; }
+      if (G.W) draw(now);
+      updateHud();
+      if (FM.isOver(st) && !G.ended) { G.ended = true; onEnd(); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function onEnd() {
+    const st = G.state, r = st.result;
+    if (r.won) { SFX.win(); toast('🎉 Everyone made it out!', 3000); } else { SFX.lose(); toast("⏰ Time's up!", 3000); }
+    G.selected = null; releaseWake();
+    setTimeout(() => {
+      if (G.state !== st) return;
+      if (r.won) { const b = store.get('best', {}); if (!(b[st.difficulty] >= r.timeLeftMs)) { b[st.difficulty] = r.timeLeftMs; store.set('best', b); r.newBest = true; } }
+      $('endTitle').textContent = r.won ? '🎉 You escaped!' : '⏰ Time ran out';
+      const best = bestOf(st.difficulty);
+      $('endStats').innerHTML = '<span>Result</span><span>' + (r.won ? 'Win' : 'Lose') + '</span>' +
+        '<span>Time left</span><span>' + fmt(r.timeLeftMs) + '</span>' +
+        '<span>Handoffs</span><span>' + r.handoffs + '</span>' +
+        '<span>Difficulty</span><span>' + st.difficulty + '</span>' +
+        '<span>Seed</span><span>' + st.seed + '</span>' +
+        (best != null ? '<span>Best time left</span><span>' + fmt(best) + (r.newBest ? ' 🏆 new!' : '') + '</span>' : '');
+      show('end');
+    }, 3200);
+  }
+
+  // ---------- wiring ----------
+  function syncSetup() {
+    document.querySelectorAll('#diffSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === settings.difficulty));
+    $('seedIn').value = settings.seed || '';
+    const b = bestOf(settings.difficulty); $('bestLine').textContent = b != null ? '🏆 Best time left on ' + settings.difficulty + ': ' + fmt(b) : '';
+  }
+  function syncSettings() {
+    $('tgSound').classList.toggle('off', !settings.sound); $('tgSound').lastChild.textContent = settings.sound ? 'On' : 'Off';
+    $('tgVib').classList.toggle('off', !settings.vibration); $('tgVib').lastChild.textContent = settings.vibration ? 'On' : 'Off';
+  }
+  $('btnPlay').onclick = () => { syncSetup(); show('setup'); tone(500, .05); };
+  $('btnHow').onclick = () => show('how');
+  $('btnSettings').onclick = () => { syncSettings(); show('settings'); };
+  $('btnHowBack').onclick = $('btnSetupBack').onclick = $('btnSettingsBack').onclick = $('btnEndTitle').onclick = () => show('title');
+  document.querySelectorAll('#diffSeg button').forEach(b => b.onclick = () => { settings.difficulty = b.dataset.d; saveSettings(); syncSetup(); });
+  $('btnStart').onclick = () => {
+    settings.seed = $('seedIn').value.trim(); saveSettings();
+    startGame(settings.difficulty, parseSeed(settings.seed));
+  };
+  $('tgSound').onclick = () => { settings.sound = !settings.sound; saveSettings(); syncSettings(); tone(600, .06); };
+  $('tgVib').onclick = () => { settings.vibration = !settings.vibration; saveSettings(); syncSettings(); buzz(40); };
+  $('btnClearBest').onclick = () => { store.set('best', {}); $('btnClearBest').textContent = 'Best times cleared'; setTimeout(() => { $('btnClearBest').textContent = 'Reset best times'; }, 1500); };
+  $('pauseBtn').onclick = pauseGame;
+  $('fitBtn').onclick = () => { if (G.state && !G.state.paused) { G.trailUntil = 0; fitCamera(); } };
+  $('passBtn').onclick = () => act({ type: 'pass' });
+  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed);
+  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed());
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
