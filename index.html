@@ -94,6 +94,7 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
 #fitBtn { width: 60px; height: 60px; border-radius: 30px; background: rgba(255,255,255,.2); font-size: 24px; }
 #passBtn { flex: 1; height: 60px; border-radius: 30px; background: #fff; color: var(--holder); font-size: 21px; font-weight: 800; }
 #passBtn:active { transform: scale(.97); }
+#passBtn:disabled { opacity: .65; }
 
 /* overlay */
 #overlay { position: fixed; inset: 0; background: rgba(8,16,11,.86); display: none; align-items: center; justify-content: center;
@@ -134,6 +135,13 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
   <div class="field">
     <label for="seedIn">Map seed (optional)</label>
     <input type="text" id="seedIn" inputmode="text" autocomplete="off" placeholder="Random">
+  </div>
+  <div class="field">
+    <label>Play with</label>
+    <div class="seg" id="partnerSeg">
+      <button data-p="human">Another person<small>pass the phone</small></button>
+      <button data-p="ai">AI partner<small>you are Player 1</small></button>
+    </div>
   </div>
   <div class="field">
     <label>Tiles</label>
@@ -480,6 +488,7 @@ function newGame(opts) {
     // extras (derived or bookkeeping)
     lattice: {}, cells: {}, walls: {}, wallList: [], logs: {}, logList: [],
     curHold: [], curReveal: [], lastReveal: [],
+    aiHolder: opts.ai ? 1 : null, recent: [],
     handoffs: 0, moves: 0, paused: false, lastTickMs: null, result: null,
   };
   placeTile(state, LIB.start, 0, 0, 0);
@@ -694,7 +703,7 @@ function applyAction(state, a) {
     }
     case 'ping': {
       if (!cellAt(state, a.at.x, a.at.y)) return fail('nowhere');
-      state.ping = { x: a.at.x, y: a.at.y, by: state.holder };
+      state.ping = { x: a.at.x, y: a.at.y, by: a.by != null ? a.by : state.holder };
       ev.push({ type: 'ping' });
       return { ok: true, events: ev };
     }
@@ -716,6 +725,7 @@ function applyAction(state, a) {
         to = targets.find(t => t.action === 'burrow' && t.x === a.to.x && t.y === a.to.y); if (!to) return fail('illegal');
       }
       state.talkAllowed = false;
+      state.recent.push(a.animal + '|' + key(from.x, from.y)); if (state.recent.length > 10) state.recent.shift();
       an.pos = { x: to.x, y: to.y }; state.moves++;
       state.curHold.push({ animal: a.animal, path: a.type === 'move' ? [from].concat(rayPath(from, to)) : [from, { x: to.x, y: to.y }] });
       ev.push({ type: a.type === 'move' ? 'move' : a.type, animal: a.animal, from, to: an.pos });
@@ -969,6 +979,36 @@ function runTests(verbose) {
     applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
     eq(s.timeLeftMs, 90000, 'reset to the chosen time');
   });
+  test('AI: picks a legal action from the start and can hint at an animal for its partner', () => {
+    const s = fresh(9, 'easy');
+    for (const who of [0, 1]) {
+      const a = aiChoose(s, who); assert(a && ['move', 'explore', 'climb', 'burrow', 'pass'].includes(a.type));
+      if (a.type !== 'pass') { s.holder = who; assert(applyAction(JSON.parse(JSON.stringify(s)), a).ok, 'AI action must be legal: ' + JSON.stringify(a)); }
+    }
+    s.holder = 0;
+    const hint = aiHint(s, 0); assert(hint === null || cellAt(s, hint.x, hint.y), 'hint is a real square');
+    eq(s.holder, 0, 'aiChoose must not change whose turn it is');
+  });
+  test('AI: plays both sides and wins easy games, with random and premade tiles, never an illegal move', () => {
+    for (const tiles of ['random', 'premade']) for (let seed = 1; seed <= 4; seed++) {
+      const r = selfPlay({ seed, difficulty: 'easy', tiles, timeMs: 600000 });
+      assert(!r.stuck, tiles + ' seed ' + seed + ' got stuck'); assert(r.won, tiles + ' seed ' + seed + ' not won');
+    }
+  });
+  test('AI: handles a hard random map without getting stuck or looping', () => {
+    for (let seed = 1; seed <= 2; seed++) { const r = selfPlay({ seed, difficulty: 'hard', tiles: 'random', timeMs: 900000 }); assert(r.won, 'seed ' + seed + (r.stuck ? ' stuck' : ' not won')); }
+  });
+  test('AI: a partner ping on a doorway sends that doorway\'s animal there', () => {
+    const s = fresh(9, 'hard');                                   // holder 1 has Down/Right: bird -> south door, rabbit -> east door
+    const door = col => { const d = doorways(s).find(d => d.animal === col && d.status === 'open'); return d; };
+    for (const col of ['bird', 'rabbit']) {
+      const d = door(col); s.ping = { x: d.x, y: d.y, by: 0 };
+      const c = aiChoose(s, 1);
+      assert(c.type === 'move' && c.animal === col && c.to.x === d.x && c.to.y === d.y, 'ping on the ' + col + ' door should send the ' + col + ': ' + JSON.stringify(c));
+    }
+    s.ping = { x: door('bird').x, y: door('bird').y, by: 1 };    // the AI's own ping is not an instruction to itself
+    assert(aiChoose(s, 1), 'still decides');
+  });
   test('move cap per hold', () => {
     const old = CONFIG.moveCapPerHold; CONFIG.moveCapPerHold = 1;
     try {
@@ -1013,7 +1053,178 @@ function runTests(verbose) {
   return { passed: results.length - failed.length, failed: failed.length, results };
 }
 
-const FM = { CONFIG, ANIMALS, INFO, LIB, buildDeck, SIDES, DV, ACT_DIR, key, newGame, tick, applyAction, legalTargets, availableActions,
+// ---------- AI partner ----------
+// The AI plays one action set. For each animal it has a goal (its food, then the exit, or a doorway when
+// the map still has to be explored). It measures how far each square is from the goal in "straight-line
+// moves" (a move of any length costs the same, plus a small length term) and picks the legal move, with
+// the actions it holds right now, that gets an animal closest. When nothing helps it passes the phone.
+const AI_SEG = 100;
+function aiDist(state, startKey, animal, reverse, block) {   // block: optional Set of squares slides cannot enter
+  // Dijkstra over squares. Edges: straight slides (ignoring animals), logs, burrow jumps (not after the grab).
+  const dist = { [startKey]: 0 }, done = {}, open = [[0, startKey]];
+  const burrow = new Set();
+  if (!state.grabbed) for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'burrow' && c.animal === animal) burrow.add(k); }
+  const relax = (k, d) => { if (dist[k] === undefined || d < dist[k]) { dist[k] = d; open.push([d, k]); } };
+  if (!reverse) burrow.forEach(k => relax(k, AI_SEG + 2));          // forward: jump from the start square
+  while (open.length) {
+    let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+    const [d, k] = open.splice(bi, 1)[0];
+    if (done[k]) continue; done[k] = 1;
+    const c = state.cells[k];
+    for (const dir of SIDES) {
+      let x = c.x, y = c.y, len = 0;
+      for (;;) { const n = stepFrom(state, x, y, dir); if (!n || (block && block.has(key(n.x, n.y)))) break; x = n.x; y = n.y; len++; relax(key(x, y), d + AI_SEG + len); }
+    }
+    const l = state.logs[k]; if (l) relax(key(l.x, l.y), d + AI_SEG + 2);
+    if (reverse && burrow.has(k)) for (const sk in state.cells) relax(sk, d + AI_SEG + 2);   // anyone can jump to this burrow
+  }
+  return dist;
+}
+
+// Best action for the player holding actionSets[who] (default: the current holder), or {type:'pass'}.
+function aiChoose(state, who) {
+  if (isOver(state)) return null;
+  const saved = state.holder; if (who != null) state.holder = who;
+  try {
+    const me = state.holder, acts = holderActions(state);
+    const foods = {}; let exitCell = null;
+    for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'food') foods[c.animal] = c; else if (c.kind === 'exit') exitCell = c; }
+    const open = doorways(state).filter(d => d.status === 'open');
+    const posKey = a => key(state.animals[a].pos.x, state.animals[a].pos.y);
+    const alive = ANIMALS.filter(a => !state.animals[a].escaped);
+    const focus = state.ping && state.ping.by !== me ? state.ping : null;      // the partner's ping
+    const lowTime = state.timeLeftMs < state.startMs * 0.4;
+
+    // 1. is more of the map needed? then someone has to explore
+    const needExplore = state.deck.length > 0 && open.length > 0 && (state.grabbed ? !exitCell : ANIMALS.some(a => !foods[a]));
+    let explorer = null;
+    if (needExplore) {
+      let best = Infinity;
+      for (const a of alive) {
+        const mine = open.filter(d => d.animal === a); if (!mine.length) continue;
+        const fwd = aiDist(state, posKey(a), a, false);
+        const others = new Set(alive.filter(o => o !== a).map(posKey));
+        const clear = aiDist(state, posKey(a), a, false, others);          // same, with the other animals in the way
+        for (const d of mine) {
+          let cost = clear[key(d.x, d.y)];
+          if (cost === undefined) { cost = fwd[key(d.x, d.y)]; if (cost === undefined) continue; cost += 400; }   // path currently blocked
+          if (!state.grabbed && foods[a] && posKey(a) === key(foods[a].x, foods[a].y)) cost += 250;   // don't leave food lightly
+          if (focus && focus.x === d.x && focus.y === d.y) cost -= 500;
+          if (cost < best) { best = cost; explorer = { animal: a, door: d }; }
+        }
+      }
+    }
+    if (explorer && acts.includes('explore') && posKey(explorer.animal) === key(explorer.door.x, explorer.door.y))
+      return { type: 'explore', animal: explorer.animal };
+
+    // 2. goals
+    const goal = {};
+    for (const a of alive) {
+      if (explorer && explorer.animal === a) goal[a] = key(explorer.door.x, explorer.door.y);
+      else if (!state.grabbed) goal[a] = foods[a] ? key(foods[a].x, foods[a].y) : null;
+      else goal[a] = exitCell ? key(exitCell.x, exitCell.y) : null;
+    }
+
+    state.aiInfo = { who: me, explorer: explorer && { animal: explorer.animal, x: explorer.door.x, y: explorer.door.y }, goal };   // for debugging
+    // 3. best improving move with the actions held now
+    let best = null, bestTimer = null;     // bestTimer: last-resort moves (unused timer squares, stepping straight back)
+    const consider = (a, t, gain, newD, soft) => {
+      if (!soft && state.recent.includes(a + '|' + key(t.x, t.y))) soft = true;      // going straight back: last resort
+      if (focus && focus.x === state.animals[a].pos.x && focus.y === state.animals[a].pos.y) gain += 300;
+      const slot = soft ? bestTimer : best;
+      if (!slot || gain > slot.gain || (gain === slot.gain && newD < slot.newD)) { const v = { a, t, gain, newD }; if (soft) bestTimer = v; else best = v; }
+    };
+    const openKeys = new Set(open.map(d => key(d.x, d.y)));
+    for (const a of alive) {
+      const targets = legalTargets(state, a);
+      if (goal[a]) {
+        const map = aiDist(state, goal[a], a, true), cur = map[posKey(a)];
+        if (cur === undefined || cur === 0) continue;
+        for (const t of targets) {
+          const d = map[key(t.x, t.y)]; if (d === undefined) continue;
+          const c = cellAt(state, t.x, t.y);
+          const isTimer = c.kind === 'timer' && !timerUsed(state, c.x, c.y);
+          if (cur - d > 0) consider(a, t, cur - d, d, isTimer && !lowTime);   // timer squares: avoid unless time is low
+        }
+      } else if (explorer && openKeys.has(posKey(a))) {
+        // idle animal standing on a doorway: get out of the explorer's way
+        for (const t of targets) {
+          if (openKeys.has(key(t.x, t.y)) || !ACT_DIR[t.action]) continue;
+          const c = cellAt(state, t.x, t.y); if (c.kind === 'timer' && !timerUsed(state, c.x, c.y)) continue;
+          consider(a, t, 50, 1000 + Math.abs(t.x - state.animals[a].pos.x) + Math.abs(t.y - state.animals[a].pos.y));
+        }
+      }
+    }
+    if (!best) {
+      // nobody can improve: is an animal standing in the way of another animal (on its path or its goal square)?
+      const avoid = {};                                 // blocker -> squares it should leave
+      const addBlocker = (x, keys) => { (avoid[x] = avoid[x] || new Set()); keys.forEach(k => avoid[x].add(k)); };
+      for (const y of alive) {
+        if (!goal[y]) continue;
+        const map = aiDist(state, goal[y], y, true), cur = map[posKey(y)];
+        if (cur === undefined || cur === 0) continue;
+        const gc = state.cells[goal[y]], occ = animalAt(state, gc.x, gc.y);
+        if (occ && occ !== y) addBlocker(occ, [goal[y]]);
+        for (const dir of SIDES) {
+          const line = []; let x = state.animals[y].pos.x, yy = state.animals[y].pos.y;
+          for (;;) { const n = stepFrom(state, x, yy, dir); if (!n) break; x = n.x; yy = n.y; line.push(key(x, yy)); }
+          const bi = line.findIndex(k => { const c = state.cells[k]; return animalAt(state, c.x, c.y); });
+          if (bi < 0 || !line.slice(bi).some(k => map[k] !== undefined && map[k] < cur)) continue;
+          const c = state.cells[line[bi]]; addBlocker(animalAt(state, c.x, c.y), line);
+        }
+      }
+      for (const x in avoid) {
+        const pos = state.animals[x].pos, map = goal[x] ? aiDist(state, goal[x], x, true) : null, here = map ? map[key(pos.x, pos.y)] : 0;
+        if (map && here > 0) {                          // mid-route and able to progress with some action set: it will move on by itself
+          const saved = state.actionSets[me]; state.actionSets[me] = ['up', 'down', 'left', 'right', 'climb', 'burrow'];
+          let progress = false;
+          try { progress = legalTargets(state, x).some(t => map[key(t.x, t.y)] !== undefined && map[key(t.x, t.y)] < here); } finally { state.actionSets[me] = saved; }
+          if (progress) continue;
+        }
+        for (const t of legalTargets(state, x)) {
+          const k = key(t.x, t.y), c = cellAt(state, t.x, t.y);
+          if (avoid[x].has(k) || openKeys.has(k) || (c.kind === 'timer' && !timerUsed(state, c.x, c.y))) continue;
+          const pen = map ? Math.max(0, (map[k] === undefined ? 9999 : map[k]) - here) : 0;
+          consider(x, t, 40 - Math.min(30, Math.floor(pen / 10)), Math.abs(t.x - pos.x) + Math.abs(t.y - pos.y));
+        }
+      }
+    }
+    if (!best) best = bestTimer;
+    if (!best) return { type: 'pass' };
+    const { a, t } = best;
+    if (t.action === 'climb') return { type: 'climb', animal: a };
+    if (t.action === 'burrow') return { type: 'burrow', animal: a, to: { x: t.x, y: t.y } };
+    return { type: 'move', animal: a, to: { x: t.x, y: t.y } };
+  } finally { state.holder = saved; }
+}
+
+// Where the AI would point the human to look after handing over: the animal it would move next.
+function aiHint(state, who) {
+  const a = aiChoose(state, who);
+  if (!a || a.type === 'pass') return null;
+  const p = state.animals[a.animal].pos; return { x: p.x, y: p.y };
+}
+
+// Both sides played by the AI against a simulated clock (tests and tuning).
+function selfPlay(opts) {
+  const s = newGame(opts), MOVE_MS = opts.moveMs || 1500, PASS_MS = opts.passMs || 1500, CAP = opts.cap || 6;
+  let t = 0, holdMoves = 0, emptyHolds = 0; tick(s, 0);
+  for (let guard = 0; guard < 4000 && !isOver(s); guard++) {
+    const a = aiChoose(s);
+    if (!a || a.type === 'pass' || holdMoves >= CAP) {
+      if (holdMoves === 0) emptyHolds++; else emptyHolds = 0;
+      if (emptyHolds >= 3) return { won: false, stuck: true, s };
+      applyAction(s, { type: 'pass' }); holdMoves = 0; t += PASS_MS;
+    } else {
+      const r = applyAction(s, a); if (!r.ok) throw new Error('AI chose an illegal action ' + JSON.stringify(a) + ' ' + r.reason);
+      holdMoves++; emptyHolds = 0; t += MOVE_MS;
+    }
+    tick(s, t);
+  }
+  return { won: s.phase === 'won', stuck: false, s };
+}
+
+const FM = { aiDist, aiChoose, aiHint, selfPlay, CONFIG, ANIMALS, INFO, LIB, buildDeck, SIDES, DV, ACT_DIR, key, newGame, tick, applyAction, legalTargets, availableActions,
   exploreDoor, doorways, cellAt, animalAt, effectiveKind, timerUsed, isOver, holderActions, arrive, runTests, hashStr, mulberry32 };
 // ===== LOGIC END =====
 
@@ -1031,7 +1242,7 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, buildDeck, SIDES, DV, ACT_DIR, key, new
     get(k, d) { try { const v = localStorage.getItem('forestmaze.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('forestmaze.' + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
   };
-  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '', timeMs: 180000, tiles: 'random' }, store.get('settings', {}));
+  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '', timeMs: 180000, tiles: 'random', partner: 'human' }, store.get('settings', {}));
   const saveSettings = () => store.set('settings', settings);
 
   // ---------- sound & vibration ----------
@@ -1073,8 +1284,8 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, buildDeck, SIDES, DV, ACT_DIR, key, new
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
     if (id === 'game') requestAnimationFrame(resize);
   }
-  const bestKey = (d, ms) => d + ':' + ms / 1000;     // best times are only comparable for the same time limit
-const bestOf = (d, ms) => store.get('best', {})[bestKey(d, ms)];
+  const bestKey = (d, ms, ai) => d + ':' + ms / 1000 + (ai ? ':ai' : '');     // best times are only comparable for the same time limit
+const bestOf = (d, ms, ai) => store.get('best', {})[bestKey(d, ms, ai)];
 const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minTimeMs, Math.min(C.maxTimeMs, settings.timeMs + dir * C.timeStepMs)); saveSettings(); syncSetup(); };
   function randomSeed() { return 100000 + Math.floor(Math.random() * 900000); }
   function parseSeed(str) {
@@ -1092,14 +1303,14 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   FM.ui = G;
   const cv = $('cv'), ctx = cv.getContext('2d');
 
-  function startGame(difficulty, seed, timeMs, tiles) {
-    G.state = FM.newGame({ difficulty, seed, timeMs, tiles });
+  function startGame(difficulty, seed, timeMs, tiles, partner) {
+    G.state = FM.newGame({ difficulty, seed, timeMs, tiles, ai: partner === 'ai' });
     G.state.paused = true;
-    Object.assign(G, { selected: null, burrowMode: false, ended: false, goal: null, trailUntil: 0, barKey: '', trackKey: '', lastSec: -1, doorCache: null, anim: {}, doorKey: '' });
+    Object.assign(G, { selected: null, burrowMode: false, ended: false, goal: null, trailUntil: 0, barKey: '', trackKey: '', lastSec: -1, doorCache: null, anim: {}, doorKey: '', aiNext: 0, aiMoves: 0 });
     show('game');
     requestAnimationFrame(() => { resize(); G.cam.z = Math.min(G.W, G.H) / 6.8; G.cam.x = 2.5; G.cam.y = 2.5; });
     FM.ANIMALS.forEach(a => { G.anim[a] = { x: G.state.animals[a].pos.x, y: G.state.animals[a].pos.y }; });
-    overlay('<h2>Ready?</h2><p>Player 1 holds the phone first. You have ' + fmt(G.state.startMs) + '. The clock starts when you tap Start.</p><button class="big" id="ovGo">Start</button><button class="big alt" id="ovQuit">Quit</button>');
+    overlay('<h2>Ready?</h2><p>' + (G.state.aiHolder != null ? 'You are Player 1. Tap Pass to hand the phone to your AI partner (Player 2); it plays, then passes back. ' : 'Player 1 holds the phone first. ') + 'You have ' + fmt(G.state.startMs) + '. The clock starts when you tap Start.</p><button class="big" id="ovGo">Start</button><button class="big alt" id="ovQuit">Quit</button>');
     $('ovGo').onclick = () => { closeOverlay(); G.state.paused = false; G.state.lastTickMs = performance.now(); requestWake(); };
     $('ovQuit').onclick = quitGame;
   }
@@ -1127,8 +1338,10 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   }
 
   // ---------- performing actions ----------
+  const aiHolding = () => !!G.state && G.state.aiHolder === G.state.holder && !FM.isOver(G.state);
   function act(a) {
     const st = G.state; if (!st || st.paused) return { ok: false };
+    if (aiHolding() && !a._ai) return { ok: false };               // the AI is playing: no input
     FM.tick(st, performance.now());
     const res = FM.applyAction(st, a);
     if (!res.ok) { SFX.bad(); return res; }
@@ -1147,6 +1360,31 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     }
     G.burrowMode = false; G.barKey = '';
     return res;
+  }
+
+  // ---------- AI partner ----------
+  const AI_MAX_MOVES = 6;            // moves per hold before it hands the phone back
+  function aiStep(now) {
+    const st = G.state;
+    if (!st || !aiHolding() || st.paused) { G.aiNext = 0; if (st && !aiHolding()) G.aiMoves = 0; return; }
+    if (!G.aiNext) { G.aiNext = now + 1000; G.aiMoves = 0; return; }       // a moment of "thinking" after the handoff
+    if (now < G.aiNext) return;
+    FM.tick(st, performance.now());
+    let a = G.aiMoves >= AI_MAX_MOVES ? { type: 'pass' } : FM.aiChoose(st);
+    if (!a) return;
+    a._ai = true;
+    if (a.type === 'pass') {
+      act(a);                                                            // hands over, human sees the trails
+      const hint = FM.aiHint(st, st.holder);                             // point at the animal it would move next
+      if (hint) { act({ type: 'ping', at: hint, by: st.aiHolder, _ai: true }); G.goal = { x: hint.x + .5, y: hint.y + .5 }; }
+      G.aiNext = 0; G.aiMoves = 0; return;
+    }
+    const res = act(a);
+    G.aiMoves++; G.aiNext = now + (a.type === 'explore' ? 1100 : 700);
+    if (res.ok && a.type !== 'explore') {                                // keep the moving animal in view
+      const p = st.animals[a.animal].pos, sc = w2s(p.x + .5, p.y + .5), m = 50;
+      if (sc.x < m || sc.y < m || sc.x > G.W - m || sc.y > G.H - m) G.goal = { x: p.x + .5, y: p.y + .5 };
+    }
   }
 
   function focusNewTile(idx) {
@@ -1198,6 +1436,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     if (ptrs.size === 1) {
       lpTimer = setTimeout(() => {
         const q = ptrs.get(e.pointerId); if (!q || q.moved || ptrs.size !== 1) return;
+        if (aiHolding()) return;
         longFired = true; const w = s2w(q.x, q.y); act({ type: 'ping', at: { x: Math.floor(w.x), y: Math.floor(w.y) } });
       }, 450);
     } else if (ptrs.size === 2) {
@@ -1234,6 +1473,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     for (const a of G.arrows) if (Math.hypot(sx - a.x, sy - a.y) < a.r + 6) {       // off-screen animal arrows
       const an = st.animals[a.name]; G.goal = { x: an.pos.x + .5, y: an.pos.y + .5 }; SFX.select(); return;
     }
+    if (aiHolding()) return;
     const w = s2w(sx, sy), sq = { x: Math.floor(w.x), y: Math.floor(w.y) };
     const targets = G.selected ? FM.legalTargets(st, G.selected) : [];
     if (G.burrowMode) {
@@ -1261,8 +1501,10 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     if (warn && !st.paused && sec !== G.lastSec) SFX.tick();
     G.lastSec = sec;
     const acts = FM.holderActions(st);
-    $('who').textContent = 'Player ' + (st.holder + 1) + ' · ' + acts.map(a => ACT_UI[a][1]).join(' · ');
-    $('banner').style.display = st.talkAllowed ? 'block' : 'none';
+    const vsAI = st.aiHolder != null, ai = aiHolding();
+    $('who').textContent = (vsAI ? (ai ? '🤖 AI' : 'You') : 'Player ' + (st.holder + 1)) + ' · ' + acts.map(a => ACT_UI[a][1]).join(' · ');
+    $('banner').style.display = st.talkAllowed && !vsAI ? 'block' : 'none';
+    const pb = $('passBtn'); pb.disabled = ai; pb.textContent = ai ? '🤖 AI is playing…' : (vsAI ? 'Pass to the AI ➜' : 'Pass the phone ➜');
 
     // action bar
     const av = G.selected ? FM.availableActions(st, G.selected) : {};
@@ -1275,6 +1517,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
         d.className = 'chip' + (isBtn ? ' btn' : '') + (isBtn && av[a] ? ' lit' : '') + (a === 'burrow' && G.burrowMode ? ' armed' : '');
         d.innerHTML = '<span class="ic">' + ACT_UI[a][0] + '</span><small>' + ACT_UI[a][1] + '</small>';
         if (isBtn) d.onclick = () => {
+          if (aiHolding()) return;
           if (!G.selected) { toast('Tap an animal first', 1200); SFX.bad(); return; }
           if (!av[a]) { toast(a === 'explore' ? 'Stand on a doorway of its own colour' : a === 'climb' ? 'Stand on the end of a log' : 'No free burrow of its colour yet', 1500); SFX.bad(); return; }
           if (a === 'burrow') { G.burrowMode = !G.burrowMode; G.barKey = ''; toast('Tap a burrow to jump to', 1300); } else act({ type: a, animal: G.selected });
@@ -1498,6 +1741,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
         if (Math.abs(G.goal.x - G.cam.x) < .01 && Math.abs(G.goal.y - G.cam.y) < .01 && (!G.goal.z || Math.abs(G.goal.z - G.cam.z) < .2)) G.goal = null;
       }
       if (G.selected && st.animals[G.selected].escaped) { G.selected = null; G.barKey = ''; }
+      aiStep(now);
       if (G.W) draw(now);
       updateHud();
       if (FM.isOver(st) && !G.ended) { G.ended = true; onEnd(); }
@@ -1511,15 +1755,16 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     G.selected = null; releaseWake();
     setTimeout(() => {
       if (G.state !== st) return;
-      if (r.won) { const b = store.get('best', {}); const bk = bestKey(st.difficulty, st.startMs); if (!(b[bk] >= r.timeLeftMs)) { b[bk] = r.timeLeftMs; store.set('best', b); r.newBest = true; } }
+      if (r.won) { const b = store.get('best', {}); const bk = bestKey(st.difficulty, st.startMs, st.aiHolder != null); if (!(b[bk] >= r.timeLeftMs)) { b[bk] = r.timeLeftMs; store.set('best', b); r.newBest = true; } }
       $('endTitle').textContent = r.won ? '🎉 You escaped!' : '⏰ Time ran out';
-      const best = bestOf(st.difficulty, st.startMs);
+      const best = bestOf(st.difficulty, st.startMs, st.aiHolder != null);
       $('endStats').innerHTML = '<span>Result</span><span>' + (r.won ? 'Win' : 'Lose') + '</span>' +
         '<span>Time left</span><span>' + fmt(r.timeLeftMs) + '</span>' +
         '<span>Handoffs</span><span>' + r.handoffs + '</span>' +
         '<span>Difficulty</span><span>' + st.difficulty + '</span>' +
         '<span>Time limit</span><span>' + fmt(st.startMs) + '</span>' +
         '<span>Tiles</span><span>' + st.tilesMode + '</span>' +
+        '<span>Partner</span><span>' + (st.aiHolder != null ? 'AI 🤖' : 'Person') + '</span>' +
         '<span>Seed</span><span>' + st.seed + '</span>' +
         (best != null ? '<span>Best time left</span><span>' + fmt(best) + (r.newBest ? ' 🏆 new!' : '') + '</span>' : '');
       show('end');
@@ -1531,8 +1776,9 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     document.querySelectorAll('#diffSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === settings.difficulty));
     $('seedIn').value = settings.seed || '';
     document.querySelectorAll('#tilesSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === settings.tiles));
+    document.querySelectorAll('#partnerSeg button').forEach(b => b.classList.toggle('on', b.dataset.p === settings.partner));
     $('timeVal').textContent = fmt(settings.timeMs);
-    const b = bestOf(settings.difficulty, settings.timeMs); $('bestLine').textContent = b != null ? '🏆 Best time left (' + settings.difficulty + ', ' + fmt(settings.timeMs) + '): ' + fmt(b) : '';
+    const b = bestOf(settings.difficulty, settings.timeMs, settings.partner === 'ai'); $('bestLine').textContent = b != null ? '🏆 Best time left (' + settings.difficulty + ', ' + fmt(settings.timeMs) + '): ' + fmt(b) : '';
   }
   function syncSettings() {
     $('tgSound').classList.toggle('off', !settings.sound); $('tgSound').lastChild.textContent = settings.sound ? 'On' : 'Off';
@@ -1543,10 +1789,12 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   $('btnSettings').onclick = () => { syncSettings(); show('settings'); };
   $('btnHowBack').onclick = $('btnSetupBack').onclick = $('btnSettingsBack').onclick = $('btnEndTitle').onclick = () => show('title');
   document.querySelectorAll('#diffSeg button').forEach(b => b.onclick = () => { settings.difficulty = b.dataset.d; saveSettings(); syncSetup(); });
+  $('seedIn').oninput = () => { settings.seed = $('seedIn').value.trim(); saveSettings(); };
+  document.querySelectorAll('#partnerSeg button').forEach(b => b.onclick = () => { settings.partner = b.dataset.p; saveSettings(); syncSetup(); });
   document.querySelectorAll('#tilesSeg button').forEach(b => b.onclick = () => { settings.tiles = b.dataset.t; saveSettings(); syncSetup(); });
   $('btnStart').onclick = () => {
     settings.seed = $('seedIn').value.trim(); saveSettings();
-    startGame(settings.difficulty, parseSeed(settings.seed), settings.timeMs, settings.tiles);
+    startGame(settings.difficulty, parseSeed(settings.seed), settings.timeMs, settings.tiles, settings.partner);
   };
   $('tgSound').onclick = () => { settings.sound = !settings.sound; saveSettings(); syncSettings(); tone(600, .06); };
   $('tgVib').onclick = () => { settings.vibration = !settings.vibration; saveSettings(); syncSettings(); buzz(40); };
@@ -1554,8 +1802,8 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   $('pauseBtn').onclick = pauseGame;
   $('fitBtn').onclick = () => { if (G.state && !G.state.paused) { G.trailUntil = 0; fitCamera(); } };
   $('passBtn').onclick = () => act({ type: 'pass' });
-  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed, G.state.startMs, G.state.tilesMode);
-  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed(), G.state.startMs, G.state.tilesMode);
+  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed, G.state.startMs, G.state.tilesMode, G.state.aiHolder != null ? 'ai' : 'human');
+  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed(), G.state.startMs, G.state.tilesMode, G.state.aiHolder != null ? 'ai' : 'human');
   $('timeMinus').onclick = () => stepTime(-1);
   $('timePlus').onclick = () => stepTime(1);
   document.addEventListener('contextmenu', e => e.preventDefault());
