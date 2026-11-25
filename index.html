@@ -40,6 +40,10 @@ button { font: inherit; color: inherit; border: 0; cursor: pointer; }
 .seg button small { display: block; font-weight: 400; opacity: .7; font-size: 12px; }
 .seg button.on { background: #fff; color: #14281c; }
 input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18px; width: 100%; }
+.stepper { display: flex; align-items: center; gap: 8px; }
+.stepper button { width: 56px; height: 52px; border-radius: 12px; background: rgba(255,255,255,.14); font-size: 28px; font-weight: 700; }
+.stepper button:active { background: rgba(255,255,255,.3); }
+.stepper span { flex: 1; text-align: center; font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .row { display: flex; gap: 10px; width: min(320px, 100%); }
 .row .big { flex: 1; }
 .card { width: min(420px, 100%); text-align: left; line-height: 1.45; font-size: 15px; }
@@ -71,7 +75,7 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
 #banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); max-width: 92%;
   background: #ffd966; color: #3a2a00; padding: 8px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
   text-align: center; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.4); pointer-events: none; }
-#toast { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); background: rgba(10,20,14,.92);
+#toast { position: absolute; left: 50%; top: 78%; transform: translate(-50%,-50%); background: rgba(10,20,14,.92);
   padding: 14px 20px; border-radius: 16px; font-size: 20px; font-weight: 800; text-align: center; max-width: 86%;
   opacity: 0; transition: opacity .25s; pointer-events: none; }
 #toast.show { opacity: 1; }
@@ -131,6 +135,10 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
     <label for="seedIn">Map seed (optional)</label>
     <input type="text" id="seedIn" inputmode="text" autocomplete="off" placeholder="Random">
   </div>
+  <div class="field">
+    <label>Time limit</label>
+    <div class="stepper"><button id="timeMinus" aria-label="Less time">−</button><span id="timeVal">3:00</span><button id="timePlus" aria-label="More time">+</button></div>
+  </div>
   <div class="field" id="bestLine" style="opacity:.75;font-size:14px"></div>
   <button class="big" id="btnStart">Start</button>
   <button class="big alt" id="btnSetupBack">Back</button>
@@ -159,13 +167,13 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
       <li>Tap an animal, then tap a lit square to move there. Animals slide in a straight line and are blocked by walls, bushes and each other.</li>
       <li>🧭 Explore: an animal on a doorway of its own colour reveals the next tile.</li>
       <li>🪵 Climb: from one end of a log to the other.</li>
-      <li>🕳️ Burrow: from a burrow to another burrow of the same colour.</li>
+      <li>🕳️ Burrow: from anywhere, jump the animal to any revealed burrow of its own colour. Not possible after the grab.</li>
       <li>Drag to pan, pinch to zoom, ⤢ to fit the map. Long-press a square or animal to leave a ping.</li>
     </ul>
     <h3>Timer squares ⏳</h3>
-    <p>Stopping on one flips the clock (new time = 3:00 − time left) and swaps the two action sets. Talk freely until the next move.</p>
+    <p>Stopping on one resets the clock to the full time limit and swaps the two action sets. Talk freely until the next move.</p>
     <h3>Silence</h3>
-    <p>No talking, pointing or gesturing about the game. Use pings. The only exception is talk time after a timer flip.</p>
+    <p>No talking, pointing or gesturing about the game. Use pings. The only exception is talk time after a timer square.</p>
   </div>
   <button class="big" id="btnHowBack">Back</button>
 </section>
@@ -222,7 +230,8 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
 
 // ===== LOGIC START =====
 const CONFIG = {
-  timerStartMs: 3 * 60 * 1000,            // timer start
+  timerStartMs: 3 * 60 * 1000,            // default timer start (player-selectable in setup)
+  timeStepMs: 30 * 1000, minTimeMs: 60 * 1000, maxTimeMs: 10 * 60 * 1000,   // time setting: steps of 30 s
   timerSquares: 4,                         // timer squares per game (enforced when building the deck)
   tileSize: 5,                             // squares per tile side (layout code assumes 5)
   tilesPerGame: { easy: 8, normal: 12, hard: 16 },   // plus the start tile
@@ -367,11 +376,12 @@ const key = (x, y) => x + ',' + y;
 function newGame(opts) {
   const seed = (opts.seed >>> 0);
   const difficulty = opts.difficulty || 'normal';
+  const startMs = opts.timeMs || CONFIG.timerStartMs;
   const state = {
-    seed, difficulty,
+    seed, difficulty, startMs,
     tiles: [], deck: buildDeck(seed, difficulty),
     animals: {}, phase: 'forage',
-    timeLeftMs: CONFIG.timerStartMs, usedTimers: [],
+    timeLeftMs: startMs, usedTimers: [],
     holder: 0, actionSets: [ACTION_SETS[0].slice(), ACTION_SETS[1].slice()],
     talkAllowed: false, ping: null, lastHold: [], grabbed: false,
     // extras (derived or bookkeeping)
@@ -484,12 +494,10 @@ function legalTargets(state, name) {
     if (l && !animalAt(state, l.x, l.y)) out.push({ x: l.x, y: l.y, action: 'climb' });
   }
   if (acts.includes('burrow') && state.phase === 'forage') {
-    const here = cellAt(state, an.pos.x, an.pos.y);
-    if (here.kind === 'burrow' && here.animal === name) {
-      for (const k in state.cells) {
-        const c = state.cells[k];
-        if (c.kind === 'burrow' && c.animal === name && c !== here && !animalAt(state, c.x, c.y)) out.push({ x: c.x, y: c.y, action: 'burrow' });
-      }
+    // from anywhere: any revealed burrow of the animal's colour that is free and not the square it stands on
+    for (const k in state.cells) {
+      const c = state.cells[k];
+      if (c.kind === 'burrow' && c.animal === name && !animalAt(state, c.x, c.y)) out.push({ x: c.x, y: c.y, action: 'burrow' });
     }
   }
   return out;
@@ -555,11 +563,11 @@ function finish(state, won) {
 function arrive(state, name, ev) {
   const an = state.animals[name], c = cellAt(state, an.pos.x, an.pos.y);
   if (c.kind === 'timer' && !timerUsed(state, c.x, c.y)) {
-    state.timeLeftMs = CONFIG.timerStartMs - state.timeLeftMs;      // flip like a sand timer
+    state.timeLeftMs = state.startMs;                               // timer square: back to full time
     state.usedTimers.push({ x: c.x, y: c.y });
     state.actionSets = [state.actionSets[1], state.actionSets[0]];  // role swap
     state.talkAllowed = true;
-    ev.push({ type: 'flip', timeLeftMs: state.timeLeftMs });
+    ev.push({ type: 'reset', timeLeftMs: state.timeLeftMs });
   }
   if (state.phase === 'forage' && ANIMALS.every(n => {
     const a = state.animals[n], k = cellAt(state, a.pos.x, a.pos.y);
@@ -748,20 +756,20 @@ function runTests(verbose) {
     s.animals.monkey.pos = { x: 2, y: 0 };                                    // squirrel's doorway
     assert(!applyAction(s, { type: 'explore', animal: 'monkey' }).ok);
   });
-  test('timer square flips the clock once, swaps sets, allows talking', () => {
+  test('timer square resets the clock to full once, swaps sets, allows talking', () => {
     const s = fresh(); tick(s, 0); tick(s, 50000);
     const left = s.timeLeftMs; eq(left, 130000);
     s.cells[key(0, 1)].kind = 'timer'; s.animals.squirrel.pos = { x: 1, y: 1 };
     const r = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
-    assert(r.ok && r.events.some(e => e.type === 'flip'), 'flip');
-    eq(s.timeLeftMs, CONFIG.timerStartMs - left, 'flipped time');
+    assert(r.ok && r.events.some(e => e.type === 'reset'), 'reset');
+    eq(s.timeLeftMs, CONFIG.timerStartMs, 'time back to full');
     eq(s.actionSets[0].includes('down'), true, 'sets swapped');
     assert(s.talkAllowed, 'talk allowed');
     s.animals.squirrel.pos = { x: 1, y: 1 };
     applyAction(s, { type: 'pass' });                                         // set A is now holder 1's
     assert(s.talkAllowed, 'pass keeps talk time');
     const r2 = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
-    assert(r2.ok && !r2.events.some(e => e.type === 'flip'), 'used square does nothing');
+    assert(r2.ok && !r2.events.some(e => e.type === 'reset'), 'used square does nothing');
     assert(!s.talkAllowed, 'talk ends with the next action');
   });
   test('grab happens when all four stand on food; burrows close; exit opens', () => {
@@ -792,16 +800,19 @@ function runTests(verbose) {
     s.animals.bird.pos = { x: x.x, y: x.y }; arrive(s, 'bird', ev);
     eq(s.animals.bird.escaped, false, 'cannot escape before grab');
   });
-  test('burrow: only from own colour burrow, to a free burrow, only before the grab', () => {
+  test('burrow: from anywhere to a free burrow of own colour, only before the grab', () => {
     const s = fresh(5); exploreEverything(s);
     const mine = Object.values(s.cells).filter(c => c.kind === 'burrow' && c.animal === 'rabbit'); eq(mine.length, CONFIG.burrowsPerAnimal);
-    s.animals.rabbit.pos = { x: mine[0].x, y: mine[0].y };
     applyAction(s, { type: 'pass' });                                         // set B has burrow
-    assert(availableActions(s, 'rabbit').burrow, 'burrow available');
-    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: s.animals.rabbit.pos.x, y: s.animals.rabbit.pos.y } }).ok, 'not to itself');
-    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'teleport');
-    s.animals.squirrel.pos = { x: mine[1].x, y: mine[1].y }; s.animals.rabbit.pos = { x: mine[0].x, y: mine[0].y };
-    assert(!availableActions(s, 'rabbit').burrow, 'destination occupied');
+    assert(availableActions(s, 'rabbit').burrow, 'available from a plain square');
+    const other = Object.values(s.cells).find(c => c.kind === 'burrow' && c.animal === 'squirrel');
+    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: other.x, y: other.y } }).ok, 'not to another colour');
+    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'teleport from anywhere');
+    eq(s.animals.rabbit.pos.x, mine[1].x);
+    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'not onto the square it stands on');
+    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[0].x, y: mine[0].y } }).ok, 'and back');
+    s.animals.squirrel.pos = { x: mine[1].x, y: mine[1].y };
+    eq(legalTargets(s, 'rabbit').filter(t => t.action === 'burrow').length, 0, 'other burrow occupied');
     s.animals.squirrel.pos = { x: 1, y: 2 }; s.phase = 'escape';
     assert(!availableActions(s, 'rabbit').burrow, 'closed after grab');
   });
@@ -836,6 +847,13 @@ function runTests(verbose) {
     applyAction(s, { type: 'pass' });
     eq(s.lastHold.length, 1); eq(s.lastHold[0].path.length, 2); eq(s.lastReveal.length, 1);
     eq(s.handoffs, 1); eq(s.curHold.length, 0);
+  });
+  test('custom start time: used at start and by the timer square', () => {
+    const s = newGame({ seed: 1, difficulty: 'easy', timeMs: 90000 });
+    eq(s.timeLeftMs, 90000); tick(s, 0); tick(s, 30000);
+    s.cells[key(0, 1)].kind = 'timer'; s.animals.squirrel.pos = { x: 1, y: 1 };
+    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
+    eq(s.timeLeftMs, 90000, 'reset to the chosen time');
   });
   test('move cap per hold', () => {
     const old = CONFIG.moveCapPerHold; CONFIG.moveCapPerHold = 1;
@@ -899,7 +917,7 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
     get(k, d) { try { const v = localStorage.getItem('forestmaze.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('forestmaze.' + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
   };
-  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '' }, store.get('settings', {}));
+  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '', timeMs: 180000 }, store.get('settings', {}));
   const saveSettings = () => store.set('settings', settings);
 
   // ---------- sound & vibration ----------
@@ -941,7 +959,9 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
     if (id === 'game') requestAnimationFrame(resize);
   }
-  const bestOf = d => store.get('best', {})[d];
+  const bestKey = (d, ms) => d + ':' + ms / 1000;     // best times are only comparable for the same time limit
+const bestOf = (d, ms) => store.get('best', {})[bestKey(d, ms)];
+const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minTimeMs, Math.min(C.maxTimeMs, settings.timeMs + dir * C.timeStepMs)); saveSettings(); syncSetup(); };
   function randomSeed() { return 100000 + Math.floor(Math.random() * 900000); }
   function parseSeed(str) {
     str = (str || '').trim(); if (!str) return randomSeed();
@@ -958,14 +978,14 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
   FM.ui = G;
   const cv = $('cv'), ctx = cv.getContext('2d');
 
-  function startGame(difficulty, seed) {
-    G.state = FM.newGame({ difficulty, seed });
+  function startGame(difficulty, seed, timeMs) {
+    G.state = FM.newGame({ difficulty, seed, timeMs });
     G.state.paused = true;
     Object.assign(G, { selected: null, burrowMode: false, ended: false, goal: null, trailUntil: 0, barKey: '', trackKey: '', lastSec: -1, doorCache: null, anim: {}, doorKey: '' });
     show('game');
     requestAnimationFrame(() => { resize(); G.cam.z = Math.min(G.W, G.H) / 6.8; G.cam.x = 2.5; G.cam.y = 2.5; });
     FM.ANIMALS.forEach(a => { G.anim[a] = { x: G.state.animals[a].pos.x, y: G.state.animals[a].pos.y }; });
-    overlay('<h2>Ready?</h2><p>Player 1 holds the phone first. The clock starts when you tap Start.</p><button class="big" id="ovGo">Start</button><button class="big alt" id="ovQuit">Quit</button>');
+    overlay('<h2>Ready?</h2><p>Player 1 holds the phone first. You have ' + fmt(G.state.startMs) + '. The clock starts when you tap Start.</p><button class="big" id="ovGo">Start</button><button class="big alt" id="ovQuit">Quit</button>');
     $('ovGo').onclick = () => { closeOverlay(); G.state.paused = false; G.state.lastTickMs = performance.now(); requestWake(); };
     $('ovQuit').onclick = quitGame;
   }
@@ -1003,7 +1023,7 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
       if (e.type === 'move' || e.type === 'climb' || e.type === 'burrow') SFX.move();
       if (e.type === 'ping') SFX.ping();
       if (e.type === 'reveal') { SFX.reveal(); focusNewTile(e.tile); }
-      if (e.type === 'flip') { SFX.flip(); toast('⏳ Timer flipped! ' + fmt(e.timeLeftMs) + ' left. Roles swapped.', 2600); }
+      if (e.type === 'reset') { SFX.flip(); toast('⏳ Timer reset to ' + fmt(e.timeLeftMs) + '! Roles swapped.', 2600); }
       if (e.type === 'grab') { SFX.grab(); toast('🎉 Food grabbed! Burrows closed. To the exit!', 2800); }
       if (e.type === 'escape') { SFX.escape(); }
       if (e.type === 'pass') {
@@ -1142,7 +1162,7 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
         d.innerHTML = '<span class="ic">' + ACT_UI[a][0] + '</span><small>' + ACT_UI[a][1] + '</small>';
         if (isBtn) d.onclick = () => {
           if (!G.selected) { toast('Tap an animal first', 1200); SFX.bad(); return; }
-          if (!av[a]) { toast(a === 'explore' ? 'Stand on a doorway of its own colour' : a === 'climb' ? 'Stand on the end of a log' : 'Stand on a burrow of its colour', 1500); SFX.bad(); return; }
+          if (!av[a]) { toast(a === 'explore' ? 'Stand on a doorway of its own colour' : a === 'climb' ? 'Stand on the end of a log' : 'No free burrow of its colour yet', 1500); SFX.bad(); return; }
           if (a === 'burrow') { G.burrowMode = !G.burrowMode; G.barKey = ''; toast('Tap a burrow to jump to', 1300); } else act({ type: a, animal: G.selected });
         };
         box.appendChild(d);
@@ -1377,13 +1397,14 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
     G.selected = null; releaseWake();
     setTimeout(() => {
       if (G.state !== st) return;
-      if (r.won) { const b = store.get('best', {}); if (!(b[st.difficulty] >= r.timeLeftMs)) { b[st.difficulty] = r.timeLeftMs; store.set('best', b); r.newBest = true; } }
+      if (r.won) { const b = store.get('best', {}); const bk = bestKey(st.difficulty, st.startMs); if (!(b[bk] >= r.timeLeftMs)) { b[bk] = r.timeLeftMs; store.set('best', b); r.newBest = true; } }
       $('endTitle').textContent = r.won ? '🎉 You escaped!' : '⏰ Time ran out';
-      const best = bestOf(st.difficulty);
+      const best = bestOf(st.difficulty, st.startMs);
       $('endStats').innerHTML = '<span>Result</span><span>' + (r.won ? 'Win' : 'Lose') + '</span>' +
         '<span>Time left</span><span>' + fmt(r.timeLeftMs) + '</span>' +
         '<span>Handoffs</span><span>' + r.handoffs + '</span>' +
         '<span>Difficulty</span><span>' + st.difficulty + '</span>' +
+        '<span>Time limit</span><span>' + fmt(st.startMs) + '</span>' +
         '<span>Seed</span><span>' + st.seed + '</span>' +
         (best != null ? '<span>Best time left</span><span>' + fmt(best) + (r.newBest ? ' 🏆 new!' : '') + '</span>' : '');
       show('end');
@@ -1394,7 +1415,8 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
   function syncSetup() {
     document.querySelectorAll('#diffSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === settings.difficulty));
     $('seedIn').value = settings.seed || '';
-    const b = bestOf(settings.difficulty); $('bestLine').textContent = b != null ? '🏆 Best time left on ' + settings.difficulty + ': ' + fmt(b) : '';
+    $('timeVal').textContent = fmt(settings.timeMs);
+    const b = bestOf(settings.difficulty, settings.timeMs); $('bestLine').textContent = b != null ? '🏆 Best time left (' + settings.difficulty + ', ' + fmt(settings.timeMs) + '): ' + fmt(b) : '';
   }
   function syncSettings() {
     $('tgSound').classList.toggle('off', !settings.sound); $('tgSound').lastChild.textContent = settings.sound ? 'On' : 'Off';
@@ -1407,7 +1429,7 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
   document.querySelectorAll('#diffSeg button').forEach(b => b.onclick = () => { settings.difficulty = b.dataset.d; saveSettings(); syncSetup(); });
   $('btnStart').onclick = () => {
     settings.seed = $('seedIn').value.trim(); saveSettings();
-    startGame(settings.difficulty, parseSeed(settings.seed));
+    startGame(settings.difficulty, parseSeed(settings.seed), settings.timeMs);
   };
   $('tgSound').onclick = () => { settings.sound = !settings.sound; saveSettings(); syncSettings(); tone(600, .06); };
   $('tgVib').onclick = () => { settings.vibration = !settings.vibration; saveSettings(); syncSettings(); buzz(40); };
@@ -1415,8 +1437,10 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
   $('pauseBtn').onclick = pauseGame;
   $('fitBtn').onclick = () => { if (G.state && !G.state.paused) { G.trailUntil = 0; fitCamera(); } };
   $('passBtn').onclick = () => act({ type: 'pass' });
-  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed);
-  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed());
+  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed, G.state.startMs);
+  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed(), G.state.startMs);
+  $('timeMinus').onclick = () => stepTime(-1);
+  $('timePlus').onclick = () => stepTime(1);
   document.addEventListener('contextmenu', e => e.preventDefault());
 
   requestAnimationFrame(frame);
