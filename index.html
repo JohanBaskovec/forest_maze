@@ -136,6 +136,13 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
     <input type="text" id="seedIn" inputmode="text" autocomplete="off" placeholder="Random">
   </div>
   <div class="field">
+    <label>Tiles</label>
+    <div class="seg" id="tilesSeg">
+      <button data-t="random">Random<small>new every game</small></button>
+      <button data-t="premade">Premade<small>20 hand-made</small></button>
+    </div>
+  </div>
+  <div class="field">
     <label>Time limit</label>
     <div class="stepper"><button id="timeMinus" aria-label="Less time">−</button><span id="timeVal">3:00</span><button id="timePlus" aria-label="More time">+</button></div>
   </div>
@@ -352,23 +359,107 @@ function rotateDef(def, k) {
   return (def._rot[k] = { squares, walls: def.walls.map(pair), logs: def.logs.map(pair), doors });
 }
 
+// ---------- random tile generator ----------
+// Builds a fresh 5x5 tile: doorways on 2-4 sides (walkable, random colours), optional specials,
+// scattered bushes and fences. Then it repairs the tile until every walkable square is connected,
+// by adding a log across a gap or by clearing a bush or fence.
+function genTile(id, kind, rng, o) {
+  const squares = Array.from({ length: 25 }, () => ({ kind: 'plain' }));
+  const minDoors = o.minDoors || 2;
+  const sides = shuffle(SIDES, rng).slice(0, minDoors + Math.floor(rng() * (5 - minDoors)));
+  const colours = shuffle(ANIMALS, rng), doors = {};
+  sides.forEach((sd, i) => { doors[sd] = colours[i]; });
+  const reserved = new Set(sides.map(sd => DOOR_IDX[sd]));
+  const free = shuffle([...Array(25).keys()].filter(i => !reserved.has(i)), rng);
+  let timers = 0;
+  if (o.food) squares[free.pop()] = { kind: 'food', animal: o.food };
+  if (o.burrow) squares[free.pop()] = { kind: 'burrow', animal: o.burrow };
+  if (o.exit) squares[free.pop()] = { kind: 'exit' };
+  if (o.timer) { squares[free.pop()] = { kind: 'timer' }; timers = 1; }
+  for (let n = 3 + Math.floor(rng() * 5); n > 0; n--) squares[free.pop()] = { kind: 'bush' };
+  let walls = [], logs = [];
+  for (let t = 0, nw = Math.floor(rng() * 5); t < nw * 4 && walls.length < nw; t++) {
+    const i = Math.floor(rng() * 25), d = SIDES[Math.floor(rng() * 4)];
+    const r = Math.floor(i / 5) + DV[d][1], c = (i % 5) + DV[d][0];
+    if (r < 0 || r > 4 || c < 0 || c > 4) continue;
+    const j = r * 5 + c, w = i < j ? [i, j] : [j, i];
+    if (squares[i].kind === 'bush' || squares[j].kind === 'bush' || walls.some(x => x[0] === w[0] && x[1] === w[1])) continue;
+    walls.push(w);
+  }
+  const nbrs = i => [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dr, dc]) => [Math.floor(i / 5) + dr, (i % 5) + dc])
+    .filter(([r, c]) => r >= 0 && r < 5 && c >= 0 && c < 5).map(([r, c]) => r * 5 + c);
+  const hasWall = (a, b) => walls.some(w => w[0] === Math.min(a, b) && w[1] === Math.max(a, b));
+  const components = () => {
+    const seen = new Array(25).fill(false), out = [];
+    for (let s0 = 0; s0 < 25; s0++) {
+      if (seen[s0] || squares[s0].kind === 'bush') continue;
+      const comp = [], q = [s0]; seen[s0] = true;
+      while (q.length) {
+        const i = q.shift(); comp.push(i);
+        const next = nbrs(i).filter(j => squares[j].kind !== 'bush' && !hasWall(i, j));
+        logs.forEach(([a, b]) => { if (a === i) next.push(b); if (b === i) next.push(a); });
+        for (const j of next) if (!seen[j]) { seen[j] = true; q.push(j); }
+      }
+      out.push(comp);
+    }
+    return out;
+  };
+  const tryLog = (A, B) => {
+    const plain = c => c.filter(i => squares[i].kind === 'plain' && !reserved.has(i) && !logs.some(l => l.includes(i)));
+    const pa = plain(A), pb = plain(B);
+    for (let t = 0; t < 12 && pa.length && pb.length; t++) {
+      const a = pa[Math.floor(rng() * pa.length)], b = pb[Math.floor(rng() * pb.length)];
+      if (Math.abs((a % 5) - (b % 5)) + Math.abs(Math.floor(a / 5) - Math.floor(b / 5)) >= 2) { logs.push([a, b]); return true; }
+    }
+    return false;
+  };
+  for (let g = 0; g < 40; g++) {
+    const cs = components(); if (cs.length <= 1) break;
+    const A = cs[0], inA = new Set(A), B = cs[1 + Math.floor(rng() * (cs.length - 1))];
+    if (!logs.length && rng() < 0.6 && tryLog(A, B)) continue;
+    const cand = [];
+    for (const i of A) for (const j of nbrs(i)) {
+      if (squares[j].kind === 'bush') cand.push({ bush: j });
+      else if (!inA.has(j) && hasWall(i, j)) cand.push({ wall: [Math.min(i, j), Math.max(i, j)] });
+    }
+    if (!cand.length) { if (!tryLog(A, B)) break; continue; }
+    const c = cand[Math.floor(rng() * cand.length)];
+    if (c.bush != null) squares[c.bush] = { kind: 'plain' };
+    else walls = walls.filter(w => !(w[0] === c.wall[0] && w[1] === c.wall[1]));
+  }
+  if (components().length > 1) { squares.forEach((q, i) => { if (q.kind === 'bush') squares[i] = { kind: 'plain' }; }); walls = []; }
+  return { id, kind, squares, walls, doors, logs, timers };
+}
+
 // ---------- deck ----------
-function buildDeck(seed, difficulty) {
+// Returns the shuffled tile ids plus the tile definitions used by this game.
+// mode 'random': every tile is generated for this seed. mode 'premade': tiles come from the hand-made library.
+function buildDeck(seed, difficulty, mode) {
+  mode = mode || 'random';
   const rng = mulberry32(seed);
   const n = CONFIG.tilesPerGame[difficulty];
-  const generic = Object.values(LIB).filter(t => t.kind === 'generic');
-  const withTimer = shuffle(generic.filter(t => t.timers > 0), rng);
-  const without = shuffle(generic.filter(t => t.timers === 0), rng);
   const fillers = n - FOOD_TILES.length - 1;
-  const needTimers = Math.max(0, CONFIG.timerSquares - LIB.exit.timers);
-  const takeT = Math.min(needTimers, fillers, withTimer.length);
-  const chosen = withTimer.slice(0, takeT).concat(without.slice(0, fillers - takeT));
-  if (chosen.length < fillers) chosen.push(...withTimer.slice(takeT, takeT + fillers - chosen.length));
-  const rest = shuffle(FOOD_TILES.concat(chosen.map(t => t.id)), rng);
+  const needTimers = Math.max(0, CONFIG.timerSquares - 1);          // the exit tile carries one timer square
+  const defs = {};
+  if (mode === 'random') {
+    const g = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+    ANIMALS.forEach(a => { defs['food-' + a] = genTile('food-' + a, 'food', g, { food: a, burrow: a, minDoors: 3 }); });
+    defs.exit = genTile('exit', 'exit', g, { exit: true, timer: true, minDoors: 3 });
+    for (let i = 0; i < fillers; i++) defs['g' + (i + 1)] = genTile('g' + (i + 1), 'generic', g, { timer: i < needTimers });
+  } else {
+    const generic = Object.values(LIB).filter(t => t.kind === 'generic');
+    const withTimer = shuffle(generic.filter(t => t.timers > 0), rng);
+    const without = shuffle(generic.filter(t => t.timers === 0), rng);
+    const takeT = Math.min(needTimers, fillers, withTimer.length);
+    const chosen = withTimer.slice(0, takeT).concat(without.slice(0, fillers - takeT));
+    if (chosen.length < fillers) chosen.push(...withTimer.slice(takeT, takeT + fillers - chosen.length));
+    FOOD_TILES.concat(['exit'], chosen.map(t => t.id)).forEach(id => { defs[id] = LIB[id]; });
+  }
+  const rest = shuffle(Object.keys(defs).filter(id => id !== 'exit'), rng);
   const half = Math.floor(n / 2);                                   // exit goes in the second half
   const at = half + Math.floor(rng() * (n - half));
   rest.splice(Math.min(at, rest.length), 0, 'exit');
-  return rest;
+  return { deck: rest, defs };
 }
 
 // ---------- state ----------
@@ -377,9 +468,11 @@ function newGame(opts) {
   const seed = (opts.seed >>> 0);
   const difficulty = opts.difficulty || 'normal';
   const startMs = opts.timeMs || CONFIG.timerStartMs;
+  const tilesMode = opts.tiles || 'random';
+  const built = buildDeck(seed, difficulty, tilesMode);
   const state = {
-    seed, difficulty, startMs,
-    tiles: [], deck: buildDeck(seed, difficulty),
+    seed, difficulty, startMs, tilesMode,
+    tiles: [], deck: built.deck, defs: built.defs,
     animals: {}, phase: 'forage',
     timeLeftMs: startMs, usedTimers: [],
     holder: 0, actionSets: [ACTION_SETS[0].slice(), ACTION_SETS[1].slice()],
@@ -528,7 +621,7 @@ function drawTileAt(state, door) {
   const facing = OPP[door.side];
   const tryPick = strict => {
     for (let i = 0; i < state.deck.length; i++) {
-      const def = LIB[state.deck[i]];
+      const def = state.defs[state.deck[i]];
       for (const rot of rotationOrder(state.seed, def.id, door.nx, door.ny)) {
         if (!rotateDef(def, rot).doors[facing]) continue;
         if (strict && state.deck.length > 1) {
@@ -698,17 +791,38 @@ function runTests(verbose) {
   test('rotating four times is the identity', () => {
     for (const id in LIB) for (let i = 0; i < 25; i++) eq(rotIndex(i, 4), i, id);
   });
-  test('deck: foods, exit in second half, exactly 4 timer squares, deterministic', () => {
-    for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 40; seed++) {
-      const deck = buildDeck(seed, diff), n = CONFIG.tilesPerGame[diff];
+  test('deck: foods, exit in second half, exactly 4 timer squares, deterministic (both tile modes)', () => {
+    for (const mode of ['random', 'premade']) for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 40; seed++) {
+      const { deck, defs } = buildDeck(seed, diff, mode), n = CONFIG.tilesPerGame[diff];
       eq(deck.length, n, 'deck size');
       eq(new Set(deck).size, n, 'duplicates');
       FOOD_TILES.forEach(f => assert(deck.includes(f), 'missing ' + f));
       assert(deck.indexOf('exit') >= Math.floor(n / 2), 'exit too early (' + deck.indexOf('exit') + ' of ' + n + ')');
-      eq(deck.reduce((s, id) => s + LIB[id].timers, 0), CONFIG.timerSquares, 'timers');
-      assert(JSON.stringify(deck) === JSON.stringify(buildDeck(seed, diff)), 'not deterministic');
+      eq(deck.reduce((t, id) => t + defs[id].timers, 0), CONFIG.timerSquares, 'timers');
+      assert(JSON.stringify(buildDeck(seed, diff, mode)) === JSON.stringify({ deck, defs }), 'not deterministic');
     }
-    assert(JSON.stringify(buildDeck(1, 'normal')) !== JSON.stringify(buildDeck(2, 'normal')), 'seeds should differ');
+    assert(JSON.stringify(buildDeck(1, 'normal').deck) !== JSON.stringify(buildDeck(2, 'normal').deck), 'seeds should differ');
+  });
+  test('random tiles: valid at every rotation, one food+burrow per food tile, one exit, walkable doors', () => {
+    const layouts = new Set(); let logs = 0, total = 0;
+    for (let seed = 1; seed <= 150; seed++) {
+      const { defs } = buildDeck(seed, 'hard', 'random');
+      for (const id in defs) {
+        const d = defs[id]; total++; logs += d.logs.length ? 1 : 0;
+        layouts.add(JSON.stringify([d.squares, d.walls, d.doors, d.logs]));
+        assert(Object.keys(d.doors).length >= (id === 'exit' || id.startsWith('food') ? 3 : 2), id + ' too few doors');
+        for (let k = 0; k < 4; k++) {
+          const rd = rotateDef(d, k); assert(connectedInside(rd), id + ' seed ' + seed + ' rot ' + k + ' not connected');
+          for (const sd in rd.doors) eq(rd.squares[DOOR_IDX[sd]].kind, 'plain', 'door square');
+        }
+        const count = (kind, an) => d.squares.filter(q => q.kind === kind && (!an || q.animal === an)).length;
+        if (id.startsWith('food-')) { const a = id.slice(5); eq(count('food'), 1); eq(count('food', a), 1); eq(count('burrow'), 1); eq(count('burrow', a), 1); }
+        else { eq(count('food'), 0); eq(count('burrow'), 0); }
+        eq(count('exit'), id === 'exit' ? 1 : 0); eq(count('timer'), d.timers);
+      }
+    }
+    assert(layouts.size > total * 0.95, 'tiles should rarely repeat: ' + layouts.size + '/' + total);
+    assert(logs > total * 0.03, 'some random tiles should have logs: ' + logs + '/' + total);
   });
   test('start: animals next to their doorways, 4 doors open, no overlap', () => {
     const s = fresh();
@@ -866,19 +980,19 @@ function runTests(verbose) {
     const a = fresh(11), b = fresh(11); exploreEverything(a); exploreEverything(b);
     eq(JSON.stringify(a.tiles.map(t => [t.def.id, t.rotation, t.tx, t.ty])), JSON.stringify(b.tiles.map(t => [t.def.id, t.rotation, t.tx, t.ty])));
   });
-  test('generator guarantees: whole deck placed, tiles never overlap, everything reachable (all difficulties, many seeds)', () => {
-    for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 60; seed++) {
-      const s = fresh(seed, diff); exploreEverything(s);
+  test('generator guarantees: whole deck placed, tiles never overlap, everything reachable (both modes, all difficulties, many seeds)', () => {
+    for (const mode of ['random', 'premade']) for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 60; seed++) {
+      const s = newGame({ seed, difficulty: diff, tiles: mode }); exploreEverything(s);
       eq(s.deck.length, 0, diff + ' seed ' + seed + ' deck not emptied');
       eq(s.tiles.length, CONFIG.tilesPerGame[diff] + 1);
       eq(Object.keys(s.lattice).length, s.tiles.length, 'overlap');
       const reach = reachableCells(s, key(START_POS.squirrel[1], START_POS.squirrel[0]));
-      for (const k in s.cells) { const c = s.cells[k]; if (c.kind !== 'bush') assert(reach.has(k), diff + ' seed ' + seed + ': unreachable ' + c.kind + ' at ' + k); }
+      for (const k in s.cells) { const c = s.cells[k]; if (c.kind !== 'bush') assert(reach.has(k), mode + ' ' + diff + ' seed ' + seed + ': unreachable ' + c.kind + ' at ' + k); }
     }
   });
   test('generator: while tiles remain an open doorway always exists (exploring through random doors)', () => {
     for (let seed = 1; seed <= 60; seed++) {
-      const s = fresh(seed, 'hard'); const rng = mulberry32(seed);
+      const s = newGame({ seed, difficulty: 'hard', tiles: seed % 2 ? 'random' : 'premade' }); const rng = mulberry32(seed);
       while (s.deck.length) {
         const open = doorways(s).filter(d => d.status === 'open');
         assert(open.length > 0, 'seed ' + seed + ' ran out of open doorways with ' + s.deck.length + ' tiles left');
@@ -899,7 +1013,7 @@ function runTests(verbose) {
   return { passed: results.length - failed.length, failed: failed.length, results };
 }
 
-const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick, applyAction, legalTargets, availableActions,
+const FM = { CONFIG, ANIMALS, INFO, LIB, buildDeck, SIDES, DV, ACT_DIR, key, newGame, tick, applyAction, legalTargets, availableActions,
   exploreDoor, doorways, cellAt, animalAt, effectiveKind, timerUsed, isOver, holderActions, arrive, runTests, hashStr, mulberry32 };
 // ===== LOGIC END =====
 
@@ -917,7 +1031,7 @@ const FM = { CONFIG, ANIMALS, INFO, LIB, SIDES, DV, ACT_DIR, key, newGame, tick,
     get(k, d) { try { const v = localStorage.getItem('forestmaze.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('forestmaze.' + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
   };
-  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '', timeMs: 180000 }, store.get('settings', {}));
+  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '', timeMs: 180000, tiles: 'random' }, store.get('settings', {}));
   const saveSettings = () => store.set('settings', settings);
 
   // ---------- sound & vibration ----------
@@ -978,8 +1092,8 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   FM.ui = G;
   const cv = $('cv'), ctx = cv.getContext('2d');
 
-  function startGame(difficulty, seed, timeMs) {
-    G.state = FM.newGame({ difficulty, seed, timeMs });
+  function startGame(difficulty, seed, timeMs, tiles) {
+    G.state = FM.newGame({ difficulty, seed, timeMs, tiles });
     G.state.paused = true;
     Object.assign(G, { selected: null, burrowMode: false, ended: false, goal: null, trailUntil: 0, barKey: '', trackKey: '', lastSec: -1, doorCache: null, anim: {}, doorKey: '' });
     show('game');
@@ -1405,6 +1519,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
         '<span>Handoffs</span><span>' + r.handoffs + '</span>' +
         '<span>Difficulty</span><span>' + st.difficulty + '</span>' +
         '<span>Time limit</span><span>' + fmt(st.startMs) + '</span>' +
+        '<span>Tiles</span><span>' + st.tilesMode + '</span>' +
         '<span>Seed</span><span>' + st.seed + '</span>' +
         (best != null ? '<span>Best time left</span><span>' + fmt(best) + (r.newBest ? ' 🏆 new!' : '') + '</span>' : '');
       show('end');
@@ -1415,6 +1530,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   function syncSetup() {
     document.querySelectorAll('#diffSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === settings.difficulty));
     $('seedIn').value = settings.seed || '';
+    document.querySelectorAll('#tilesSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === settings.tiles));
     $('timeVal').textContent = fmt(settings.timeMs);
     const b = bestOf(settings.difficulty, settings.timeMs); $('bestLine').textContent = b != null ? '🏆 Best time left (' + settings.difficulty + ', ' + fmt(settings.timeMs) + '): ' + fmt(b) : '';
   }
@@ -1427,9 +1543,10 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   $('btnSettings').onclick = () => { syncSettings(); show('settings'); };
   $('btnHowBack').onclick = $('btnSetupBack').onclick = $('btnSettingsBack').onclick = $('btnEndTitle').onclick = () => show('title');
   document.querySelectorAll('#diffSeg button').forEach(b => b.onclick = () => { settings.difficulty = b.dataset.d; saveSettings(); syncSetup(); });
+  document.querySelectorAll('#tilesSeg button').forEach(b => b.onclick = () => { settings.tiles = b.dataset.t; saveSettings(); syncSetup(); });
   $('btnStart').onclick = () => {
     settings.seed = $('seedIn').value.trim(); saveSettings();
-    startGame(settings.difficulty, parseSeed(settings.seed), settings.timeMs);
+    startGame(settings.difficulty, parseSeed(settings.seed), settings.timeMs, settings.tiles);
   };
   $('tgSound').onclick = () => { settings.sound = !settings.sound; saveSettings(); syncSettings(); tone(600, .06); };
   $('tgVib').onclick = () => { settings.vibration = !settings.vibration; saveSettings(); syncSettings(); buzz(40); };
@@ -1437,8 +1554,8 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   $('pauseBtn').onclick = pauseGame;
   $('fitBtn').onclick = () => { if (G.state && !G.state.paused) { G.trailUntil = 0; fitCamera(); } };
   $('passBtn').onclick = () => act({ type: 'pass' });
-  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed, G.state.startMs);
-  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed(), G.state.startMs);
+  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed, G.state.startMs, G.state.tilesMode);
+  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed(), G.state.startMs, G.state.tilesMode);
   $('timeMinus').onclick = () => stepTime(-1);
   $('timePlus').onclick = () => stepTime(1);
   document.addEventListener('contextmenu', e => e.preventDefault());
