@@ -23,8 +23,15 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
 button { font: inherit; color: inherit; border: 0; cursor: pointer; }
 
 /* generic menu screens */
-.menu { align-items: center; justify-content: center; gap: 14px; padding: 24px;
+.menu { align-items: center; justify-content: flex-start; gap: 14px; padding: 24px;
   background: radial-gradient(circle at 50% 20%, #2c5a3a, #14281c 70%); overflow-y: auto; }
+.menu > :first-child { margin-top: auto; }
+.menu > :last-child { margin-bottom: auto; }
+.extra { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; font-size: 15px; }
+.extra small { display: block; opacity: .65; font-size: 12px; }
+.extra .seg button { padding: 9px 4px; }
+.sets { background: rgba(255,255,255,.1); border-radius: 14px; padding: 10px 16px; line-height: 1.5; font-size: 15px; }
+.pill { display: flex; align-items: center; padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,.16); font-weight: 800; font-size: 16px; }
 .menu h1 { font-size: 44px; margin: 0; letter-spacing: 1px; text-align: center; }
 .menu h2 { margin: 0 0 6px; font-size: 28px; }
 .menu .emojis { font-size: 40px; letter-spacing: 6px; }
@@ -144,11 +151,13 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
     </div>
   </div>
   <div class="field">
-    <label>Tiles</label>
-    <div class="seg" id="tilesSeg">
-      <button data-t="random">Random<small>new every game</small></button>
-      <button data-t="premade">Premade<small>20 hand-made</small></button>
-    </div>
+    <label>Extras (optional)</label>
+    <div class="extra"><span>🪶 Flyer gates <small>openings only the bird and squirrel can use</small></span>
+      <div class="seg" id="gatesSeg"><button data-v="off">Off</button><button data-v="few">Few</button><button data-v="some">Some</button><button data-v="many">Many</button></div></div>
+    <div class="extra"><span>🚪 Exits <small>one shared exit, or one for each animal</small></span>
+      <div class="seg" id="exitsSeg"><button data-v="shared">Shared</button><button data-v="each">One each</button></div></div>
+    <div class="extra"><span>🗼 Hunting towers <small>the monkey must destroy them all before anyone can leave</small></span>
+      <div class="seg" id="towersSeg"><button data-v="off">Off</button><button data-v="few">1</button><button data-v="some">2</button><button data-v="many">3</button></div></div>
   </div>
   <div class="field">
     <label>Time limit</label>
@@ -171,22 +180,24 @@ input[type=text] { padding: 14px; border-radius: 12px; border: 0; font-size: 18p
       <li><b>Escape</b> – bring all four animals to the exit.</li>
     </ul>
     <h3>One phone, split actions</h3>
-    <p>Only the holder plays, and each player has only some actions:</p>
-    <ul>
-      <li><b>Set A:</b> ⬆️ Up, ⬅️ Left, 🧭 Explore</li>
-      <li><b>Set B:</b> ⬇️ Down, ➡️ Right, 🪵 Climb, 🕳️ Burrow</li>
-    </ul>
+    <p>Only the holder plays, and each player has only some actions. Every game the actions are dealt at random: each player gets exactly 2 of the 4 directions, and the other actions (🧭 Explore, 🪵 Climb, 🕳️ Burrow, and 💣 Destroy with hunting towers) are shared out between you. The Ready screen shows who holds what.</p>
     <p>Tap <b>Pass</b> and hand over the phone. The clock never stops.</p>
     <h3>Controls</h3>
     <ul>
       <li>Tap an animal, then tap a lit square to move there. Animals slide in a straight line and are blocked by walls, bushes and each other.</li>
-      <li>🧭 Explore: an animal on a doorway of its own colour reveals the next tile.</li>
+      <li>🧭 Explore: an animal on a doorway of its own colour reveals the next tile. Tiles are made on the spot and can be anything from 3×3 to 7×7.</li>
       <li>🪵 Climb: from one end of a log to the other.</li>
       <li>🕳️ Burrow: from anywhere, jump the animal to any revealed burrow of its own colour. Not possible after the grab.</li>
       <li>Drag to pan, pinch to zoom, ⤢ to fit the map. Long-press a square or animal to leave a ping.</li>
     </ul>
     <h3>Timer squares ⏳</h3>
     <p>Stopping on one resets the clock to the full time limit and swaps the two action sets. Talk freely until the next move.</p>
+    <h3>Extras (optional, chosen in setup)</h3>
+    <ul>
+      <li>🪶 <b>Flyer gates</b>: gaps in fences that only the bird and squirrel can cross. They are shortcuts, never the only way.</li>
+      <li>🚪 <b>One exit each</b>: every animal must leave through the exit of its own colour. Exits open once all of them have been found.</li>
+      <li>🗼 <b>Hunting towers</b>: the monkey must stand on each tower and use 💣 Destroy. Nobody can leave until they are all gone.</li>
+    </ul>
     <h3>Silence</h3>
     <p>No talking, pointing or gesturing about the game. Use pings. The only exception is talk time after a timer square.</p>
   </div>
@@ -248,28 +259,31 @@ const CONFIG = {
   timerStartMs: 3 * 60 * 1000,            // default timer start (player-selectable in setup)
   timeStepMs: 30 * 1000, minTimeMs: 60 * 1000, maxTimeMs: 10 * 60 * 1000,   // time setting: steps of 30 s
   timerSquares: 4,                         // timer squares per game (enforced when building the deck)
-  tileSize: 5,                             // squares per tile side (layout code assumes 5)
+  tileMin: 3, tileMax: 7,                  // generated tiles are w x h squares, each from tileMin to tileMax
   tilesPerGame: { easy: 8, normal: 12, hard: 16 },   // plus the start tile
   burrowsPerAnimal: 2,                     // informational: one on the start tile, one on its food tile
   moveCapPerHold: 0,                       // 0 = no limit. Try 5 if holds run long
   trailMs: 3000,                           // catch-up trail display
   warnMs: 30 * 1000,                       // pulse + tick under this
+  doorChance: 0.55,                        // chance of each extra doorway on a generated tile
+  gateChance: { few: 0.1, some: 0.25, many: 0.5 },   // flyer gates: chance per opportunity (see addGates)
+  towerCount: { few: 1, some: 2, many: 3 },         // hunting towers per game
 };
 
 const ANIMALS = ['squirrel', 'rabbit', 'bird', 'monkey'];
+const FLYERS = ['bird', 'squirrel'];                // the only animals that can use flyer gates
 const INFO = {
   squirrel: { emoji: '🐿️', food: '🌰', color: '#f28c28', name: 'Squirrel', foodName: 'Nut' },
   rabbit:   { emoji: '🐰', food: '🥕', color: '#3b82f6', name: 'Rabbit',   foodName: 'Carrot' },
   bird:     { emoji: '🐦', food: '🌾', color: '#f2c200', name: 'Bird',     foodName: 'Grain' },
   monkey:   { emoji: '🐒', food: '🍌', color: '#34a853', name: 'Monkey',   foodName: 'Banana' },
 };
-const ACTION_SETS = [['up', 'left', 'explore'], ['down', 'right', 'climb', 'burrow']];
+const DIR_ACTIONS = ['up', 'down', 'left', 'right'];
+const DEFAULT_SETS = [['up', 'left', 'explore'], ['down', 'right', 'climb', 'burrow']];   // used by tests
 const SIDES = ['N', 'E', 'S', 'W'];
 const DV = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
 const OPP = { N: 'S', S: 'N', E: 'W', W: 'E' };
 const ACT_DIR = { up: 'N', down: 'S', left: 'W', right: 'E' };
-const DOOR_IDX = { N: 2, E: 14, S: 22, W: 10 };   // door = middle square of each tile side
-const TS = CONFIG.tileSize;
 
 // ---------- seeded random ----------
 function mulberry32(a) {
@@ -291,115 +305,72 @@ function shuffle(arr, rng) {
   return a;
 }
 
-// ---------- tile library (hand-made data) ----------
-// Rows: . plain  # bush  T timer  E exit  S/R/B/M food (squirrel/rabbit/bird/monkey)  s/r/b/m burrow
-// Doors: "N:b E:s" = side:colour. Door squares are the middle square of a side and must be walkable.
-// Walls: "row col SIDE" = fence on that edge of that square. Logs: [[r,c],[r,c]] climbable link.
-const CH_FOOD = { S: 'squirrel', R: 'rabbit', B: 'bird', M: 'monkey' };
-const CH_ANIMAL = { s: 'squirrel', r: 'rabbit', b: 'bird', m: 'monkey' };
-function tile(id, kind, rows, doorStr, walls, logs) {
-  const squares = []; let timers = 0;
-  for (const ch of rows.join('')) {
-    if (ch === '.') squares.push({ kind: 'plain' });
-    else if (ch === '#') squares.push({ kind: 'bush' });
-    else if (ch === 'T') { squares.push({ kind: 'timer' }); timers++; }
-    else if (ch === 'E') squares.push({ kind: 'exit' });
-    else if (CH_FOOD[ch]) squares.push({ kind: 'food', animal: CH_FOOD[ch] });
-    else if (CH_ANIMAL[ch]) squares.push({ kind: 'burrow', animal: CH_ANIMAL[ch] });
-    else throw new Error('bad tile char ' + ch + ' in ' + id);
+// ---------- the action sets: random every game ----------
+// Each player gets exactly 2 of the 4 directions. The other actions (explore, climb, burrow, and destroy
+// when hunting towers are on) are split at random, every one held by exactly one player, and each player
+// gets at least one of them. Between them the two players always hold everything.
+function makeActionSets(rng, withDestroy) {
+  const dirs = shuffle(DIR_ACTIONS, rng);
+  const specials = ['explore', 'climb', 'burrow'].concat(withDestroy ? ['destroy'] : []);
+  let split;
+  do { split = specials.map(() => (rng() < 0.5 ? 0 : 1)); } while (!split.includes(0) || !split.includes(1));
+  const sets = [dirs.slice(0, 2), dirs.slice(2)];
+  sets.forEach(s => s.sort((a, b) => DIR_ACTIONS.indexOf(a) - DIR_ACTIONS.indexOf(b)));
+  specials.forEach((a, i) => sets[split[i]].push(a));
+  return sets;
+}
+
+// ---------- tiles ----------
+// A tile is w x h squares (squares row by row), fenced edges between squares, doorways on its sides
+// (never in a corner), and optional logs and flyer gates. Tiles are generated when revealed.
+const key = (x, y) => x + ',' + y;
+function wallKey(ax, ay, bx, by) { return (ax < bx || (ax === bx && ay < by)) ? key(ax, ay) + '|' + key(bx, by) : key(bx, by) + '|' + key(ax, ay); }
+const doorSq = (w, h, side, i) => side === 'N' ? i : side === 'S' ? (h - 1) * w + i : side === 'W' ? i * w : i * w + w - 1;
+
+function startDef() {                            // the hand-made 5x5 start tile
+  const rows = ['#...#', '.s.r.', '.....', '.m.b.', '#...#'], squares = [];
+  const burrow = { s: 'squirrel', r: 'rabbit', b: 'bird', m: 'monkey' };
+  for (const ch of rows.join('')) squares.push(ch === '#' ? { kind: 'bush' } : burrow[ch] ? { kind: 'burrow', animal: burrow[ch] } : { kind: 'plain' });
+  return { id: 'start', kind: 'start', w: 5, h: 5, squares, walls: [], logs: [], gates: [], timers: 0, towers: 0,
+    doors: [{ side: 'N', i: 2, animal: 'squirrel' }, { side: 'E', i: 2, animal: 'rabbit' }, { side: 'S', i: 2, animal: 'bird' }, { side: 'W', i: 2, animal: 'monkey' }] };
+}
+const START_POS = { squirrel: [1, 2], rabbit: [2, 3], bird: [3, 2], monkey: [2, 1] };   // [row, col]
+
+// Generate a tile. facing/facingIdx: the doorway that meets the one that was explored. spec says what it must
+// contain (food + burrow, an exit, a timer square, a hunting tower). The tile is repaired until every walkable
+// square can reach every other without using flyer gates.
+function genTile(rng, spec, w, h, facing, facingIdx, gateChance) {
+  const area = w * h, squares = Array.from({ length: area }, () => ({ kind: 'plain' }));
+  const lenOf = s => (s === 'N' || s === 'S') ? w : h;
+  const colours = shuffle(ANIMALS, rng);
+  const doors = [{ side: facing, i: facingIdx, animal: colours[0] }];
+  const minDoors = spec.kind === 'generic' ? 2 : 3;
+  for (const s of shuffle(SIDES.filter(x => x !== facing), rng)) {
+    if (doors.length < minDoors || rng() < CONFIG.doorChance) doors.push({ side: s, i: 1 + Math.floor(rng() * (lenOf(s) - 2)), animal: colours[doors.length] });
   }
-  if (squares.length !== 25) throw new Error('tile ' + id + ' is not 5x5');
-  const doors = {};
-  doorStr.split(' ').filter(Boolean).forEach(p => { const [s, c] = p.split(':'); doors[s] = CH_ANIMAL[c]; });
-  const wl = (walls || []).map(w => {
-    const [r, c, d] = w.split(' '); const R = +r, C = +c;
-    const a = R * 5 + C, b = (R + DV[d][1]) * 5 + (C + DV[d][0]);
-    return a < b ? [a, b] : [b, a];
-  });
-  const lg = (logs || []).map(([[r1, c1], [r2, c2]]) => [r1 * 5 + c1, r2 * 5 + c2]);
-  return { id, kind, squares, walls: wl, doors, logs: lg, timers };
-}
-
-const LIB = {};
-[
-  tile('start', 'start', ['#...#', '.s.r.', '.....', '.m.b.', '#...#'], 'N:s E:r S:b W:m'),
-  // food tiles: each holds the food and a burrow of the same colour
-  tile('food-squirrel', 'food', ['#....', '..#S.', '..#..', '.....', '.s..#'], 'N:b W:m S:r', ['3 2 E']),
-  tile('food-rabbit',   'food', ['.#...', 'r.#.R', '...#.', '.#...', '.....'], 'N:s E:m W:b', ['0 3 S']),
-  tile('food-bird',     'food', ['....B', '.##..', '..b..', '#...#', '..#..'], 'N:m W:r E:s', ['0 3 E']),
-  tile('food-monkey',   'food', ['..#M.', '.#...', '.....', '.m#..', '#....'], 'W:s E:b S:r'),
-  tile('exit', 'exit', ['.....', '.#.#.', '..E..', '.#.#.', '....T'], 'N:r W:b S:s E:m', ['2 1 E', '2 2 E']),
-  // generic tiles with one timer square
-  tile('t1', 'generic', ['T....', '.##..', '.....', '..#..', '#....'], 'N:b W:r S:m'),
-  tile('t2', 'generic', ['.....', '..#..', '.#.T.', '..#..', '.....'], 'N:m E:b S:s W:r'),
-  tile('t3', 'generic', ['....T', '.....', '#####', '.....', '.....'], 'N:r S:s', [], [[[1, 1], [3, 3]]]),
-  tile('t4', 'generic', ['.....', '#.#.#', '.....', '#.#.#', '....T'], 'N:m E:s W:b'),
-  tile('t5', 'generic', ['.#...', '...#.', '.#T..', '...#.', '.#...'], 'W:b S:m E:r'),
-  // generic tiles without timers
-  tile('p1', 'generic', ['.....', '.#.#.', '.....', '.#.#.', '.....'], 'N:r E:b S:s W:m'),
-  tile('p2', 'generic', ['..#..', '.#..#', '.....', '#..#.', '.....'], 'E:m W:s S:b'),
-  tile('p3', 'generic', ['.....', '.....', '.....', '.....', '.....'], 'N:b S:r W:s', ['1 1 E', '1 1 S', '3 3 W', '3 3 N']),
-  tile('p4', 'generic', ['#...#', '..#..', '.....', '..#..', '#...#'], 'N:m S:b W:r'),
-  tile('p5', 'generic', ['..#..', '..#..', '..#..', '..#..', '..#..'], 'E:s W:b', [], [[[1, 1], [3, 3]]]),
-  tile('p6', 'generic', ['....#', '.#...', '...#.', '.#...', '#....'], 'N:s W:m S:r'),
-  tile('p7', 'generic', ['.....', '.....', '.....', '.....', '.....'], 'N:r E:m S:s', ['0 0 S', '0 1 S', '2 2 E', '2 2 S', '3 3 E', '1 3 W']),
-  tile('p8', 'generic', ['.#.#.', '.....', '#.#.#', '.....', '.#.#.'], 'N:s S:b'),
-  tile('p9', 'generic', ['.....', '#...#', '..#..', '#...#', '.....'], 'N:m S:r W:s', ['0 2 S', '4 2 N']),
-].forEach(t => { LIB[t.id] = t; });
-const FOOD_TILES = ANIMALS.map(a => 'food-' + a);
-
-// Start layout: animals stand around the centre, each next to the doorway of its own colour.
-const START_POS = { squirrel: [1, 2], rabbit: [2, 3], bird: [3, 2], monkey: [2, 1] };
-
-// ---------- tile rotation ----------
-function rotIndex(i, k) {                       // quarter turns clockwise
-  for (let n = 0; n < k; n++) { const r = Math.floor(i / 5), c = i % 5; i = c * 5 + (4 - r); }
-  return i;
-}
-function rotateDef(def, k) {
-  def._rot = def._rot || {};
-  if (def._rot[k]) return def._rot[k];
-  const squares = new Array(25);
-  def.squares.forEach((s, i) => { squares[rotIndex(i, k)] = s; });
-  const pair = ([a, b]) => { a = rotIndex(a, k); b = rotIndex(b, k); return a < b ? [a, b] : [b, a]; };
-  const doors = {};
-  for (const s in def.doors) doors[SIDES[(SIDES.indexOf(s) + k) % 4]] = def.doors[s];
-  return (def._rot[k] = { squares, walls: def.walls.map(pair), logs: def.logs.map(pair), doors });
-}
-
-// ---------- random tile generator ----------
-// Builds a fresh 5x5 tile: doorways on 2-4 sides (walkable, random colours), optional specials,
-// scattered bushes and fences. Then it repairs the tile until every walkable square is connected,
-// by adding a log across a gap or by clearing a bush or fence.
-function genTile(id, kind, rng, o) {
-  const squares = Array.from({ length: 25 }, () => ({ kind: 'plain' }));
-  const minDoors = o.minDoors || 2;
-  const sides = shuffle(SIDES, rng).slice(0, minDoors + Math.floor(rng() * (5 - minDoors)));
-  const colours = shuffle(ANIMALS, rng), doors = {};
-  sides.forEach((sd, i) => { doors[sd] = colours[i]; });
-  const reserved = new Set(sides.map(sd => DOOR_IDX[sd]));
-  const free = shuffle([...Array(25).keys()].filter(i => !reserved.has(i)), rng);
-  let timers = 0;
-  if (o.food) squares[free.pop()] = { kind: 'food', animal: o.food };
-  if (o.burrow) squares[free.pop()] = { kind: 'burrow', animal: o.burrow };
-  if (o.exit) squares[free.pop()] = { kind: 'exit' };
-  if (o.timer) { squares[free.pop()] = { kind: 'timer' }; timers = 1; }
-  for (let n = 3 + Math.floor(rng() * 5); n > 0; n--) squares[free.pop()] = { kind: 'bush' };
+  const reserved = new Set(doors.map(d => doorSq(w, h, d.side, d.i)));
+  const free = shuffle([...Array(area).keys()].filter(i => !reserved.has(i)), rng);
+  let timers = 0, towers = 0;
+  if (spec.kind === 'food') { squares[free.pop()] = { kind: 'food', animal: spec.animal }; squares[free.pop()] = { kind: 'burrow', animal: spec.animal }; }
+  if (spec.kind === 'exit') squares[free.pop()] = spec.animal ? { kind: 'exit', animal: spec.animal } : { kind: 'exit' };
+  if (spec.timer) { squares[free.pop()] = { kind: 'timer' }; timers = 1; }
+  if (spec.tower) { squares[free.pop()] = { kind: 'tower' }; towers = 1; }
+  for (let n = Math.min(free.length, Math.round(area * (0.1 + rng() * 0.14))); n > 0; n--) squares[free.pop()] = { kind: 'bush' };
   let walls = [], logs = [];
-  for (let t = 0, nw = Math.floor(rng() * 5); t < nw * 4 && walls.length < nw; t++) {
-    const i = Math.floor(rng() * 25), d = SIDES[Math.floor(rng() * 4)];
-    const r = Math.floor(i / 5) + DV[d][1], c = (i % 5) + DV[d][0];
-    if (r < 0 || r > 4 || c < 0 || c > 4) continue;
-    const j = r * 5 + c, w = i < j ? [i, j] : [j, i];
-    if (squares[i].kind === 'bush' || squares[j].kind === 'bush' || walls.some(x => x[0] === w[0] && x[1] === w[1])) continue;
-    walls.push(w);
+  const maxWalls = Math.floor(rng() * (area / 7 + 1));
+  for (let t = 0; t < maxWalls * 4 && walls.length < maxWalls; t++) {
+    const i = Math.floor(rng() * area), d = SIDES[Math.floor(rng() * 4)];
+    const r = Math.floor(i / w) + DV[d][1], c = (i % w) + DV[d][0];
+    if (r < 0 || r >= h || c < 0 || c >= w) continue;
+    const j = r * w + c, p = i < j ? [i, j] : [j, i];
+    if (squares[i].kind === 'bush' || squares[j].kind === 'bush' || walls.some(x => x[0] === p[0] && x[1] === p[1])) continue;
+    walls.push(p);
   }
-  const nbrs = i => [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dr, dc]) => [Math.floor(i / 5) + dr, (i % 5) + dc])
-    .filter(([r, c]) => r >= 0 && r < 5 && c >= 0 && c < 5).map(([r, c]) => r * 5 + c);
-  const hasWall = (a, b) => walls.some(w => w[0] === Math.min(a, b) && w[1] === Math.max(a, b));
+  const nbrs = i => { const r = Math.floor(i / w), c = i % w, o = []; if (r > 0) o.push(i - w); if (r < h - 1) o.push(i + w); if (c > 0) o.push(i - 1); if (c < w - 1) o.push(i + 1); return o; };
+  const hasWall = (a, b) => walls.some(x => x[0] === Math.min(a, b) && x[1] === Math.max(a, b));
   const components = () => {
-    const seen = new Array(25).fill(false), out = [];
-    for (let s0 = 0; s0 < 25; s0++) {
+    const seen = new Array(area).fill(false), out = [];
+    for (let s0 = 0; s0 < area; s0++) {
       if (seen[s0] || squares[s0].kind === 'bush') continue;
       const comp = [], q = [s0]; seen[s0] = true;
       while (q.length) {
@@ -412,16 +383,17 @@ function genTile(id, kind, rng, o) {
     }
     return out;
   };
+  const dist = (a, b) => Math.abs((a % w) - (b % w)) + Math.abs(Math.floor(a / w) - Math.floor(b / w));
   const tryLog = (A, B) => {
     const plain = c => c.filter(i => squares[i].kind === 'plain' && !reserved.has(i) && !logs.some(l => l.includes(i)));
     const pa = plain(A), pb = plain(B);
     for (let t = 0; t < 12 && pa.length && pb.length; t++) {
       const a = pa[Math.floor(rng() * pa.length)], b = pb[Math.floor(rng() * pb.length)];
-      if (Math.abs((a % 5) - (b % 5)) + Math.abs(Math.floor(a / 5) - Math.floor(b / 5)) >= 2) { logs.push([a, b]); return true; }
+      if (dist(a, b) >= 2) { logs.push([a, b]); return true; }
     }
     return false;
   };
-  for (let g = 0; g < 40; g++) {
+  for (let g = 0; g < 60; g++) {
     const cs = components(); if (cs.length <= 1) break;
     const A = cs[0], inA = new Set(A), B = cs[1 + Math.floor(rng() * (cs.length - 1))];
     if (!logs.length && rng() < 0.6 && tryLog(A, B)) continue;
@@ -433,95 +405,101 @@ function genTile(id, kind, rng, o) {
     if (!cand.length) { if (!tryLog(A, B)) break; continue; }
     const c = cand[Math.floor(rng() * cand.length)];
     if (c.bush != null) squares[c.bush] = { kind: 'plain' };
-    else walls = walls.filter(w => !(w[0] === c.wall[0] && w[1] === c.wall[1]));
+    else walls = walls.filter(x => !(x[0] === c.wall[0] && x[1] === c.wall[1]));
   }
   if (components().length > 1) { squares.forEach((q, i) => { if (q.kind === 'bush') squares[i] = { kind: 'plain' }; }); walls = []; }
-  return { id, kind, squares, walls, doors, logs, timers };
+  const gates = walls.length && rng() < gateChance ? [walls[Math.floor(rng() * walls.length)]] : [];   // a fence that flyers can cross
+  return { id: spec.id, kind: spec.kind, w, h, squares, walls, doors, logs, gates, timers, towers };
 }
 
 // ---------- deck ----------
-// Returns the shuffled tile ids plus the tile definitions used by this game.
-// mode 'random': every tile is generated for this seed. mode 'premade': tiles come from the hand-made library.
-function buildDeck(seed, difficulty, mode) {
-  mode = mode || 'random';
-  const rng = mulberry32(seed);
-  const n = CONFIG.tilesPerGame[difficulty];
-  const fillers = n - FOOD_TILES.length - 1;
-  const needTimers = Math.max(0, CONFIG.timerSquares - 1);          // the exit tile carries one timer square
-  const defs = {};
-  if (mode === 'random') {
-    const g = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-    ANIMALS.forEach(a => { defs['food-' + a] = genTile('food-' + a, 'food', g, { food: a, burrow: a, minDoors: 3 }); });
-    defs.exit = genTile('exit', 'exit', g, { exit: true, timer: true, minDoors: 3 });
-    for (let i = 0; i < fillers; i++) defs['g' + (i + 1)] = genTile('g' + (i + 1), 'generic', g, { timer: i < needTimers });
-  } else {
-    const generic = Object.values(LIB).filter(t => t.kind === 'generic');
-    const withTimer = shuffle(generic.filter(t => t.timers > 0), rng);
-    const without = shuffle(generic.filter(t => t.timers === 0), rng);
-    const takeT = Math.min(needTimers, fillers, withTimer.length);
-    const chosen = withTimer.slice(0, takeT).concat(without.slice(0, fillers - takeT));
-    if (chosen.length < fillers) chosen.push(...withTimer.slice(takeT, takeT + fillers - chosen.length));
-    FOOD_TILES.concat(['exit'], chosen.map(t => t.id)).forEach(id => { defs[id] = LIB[id]; });
-  }
-  const rest = shuffle(Object.keys(defs).filter(id => id !== 'exit'), rng);
-  const half = Math.floor(n / 2);                                   // exit goes in the second half
-  const at = half + Math.floor(rng() * (n - half));
-  rest.splice(Math.min(at, rest.length), 0, 'exit');
-  return { deck: rest, defs };
+// The deck is a shuffled list of tile specs (what each tile must contain). The geometry is generated when the
+// tile is revealed. feat: { gates, exits: 'shared'|'each', towers }
+function buildDeck(seed, difficulty, feat) {
+  feat = feat || {};
+  const rng = mulberry32(seed), each = feat.exits === 'each';
+  const n = CONFIG.tilesPerGame[difficulty] + (each ? ANIMALS.length - 1 : 0);
+  const specs = {};
+  ANIMALS.forEach(a => { specs['food-' + a] = { id: 'food-' + a, kind: 'food', animal: a }; });
+  const exitIds = each ? ANIMALS.map(a => 'exit-' + a) : ['exit'];
+  exitIds.forEach((id, i) => { specs[id] = { id, kind: 'exit', animal: each ? ANIMALS[i] : null }; });
+  const generic = [];
+  for (let i = 1; i <= n - ANIMALS.length - exitIds.length; i++) { specs['g' + i] = { id: 'g' + i, kind: 'generic' }; generic.push('g' + i); }
+  const foods = ANIMALS.map(a => 'food-' + a);
+  // timer squares go on generic tiles first, then food tiles, then exit tiles
+  shuffle(generic, rng).concat(shuffle(foods, rng), shuffle(exitIds, rng)).slice(0, CONFIG.timerSquares).forEach(id => { specs[id].timer = true; });
+  // hunting towers go on generic tiles first, then food tiles
+  const towerN = CONFIG.towerCount[feat.towers] || 0;
+  shuffle(generic, rng).concat(shuffle(foods, rng)).slice(0, towerN).forEach(id => { specs[id].tower = true; });
+  const rest = shuffle(Object.keys(specs).filter(id => !exitIds.includes(id)), rng);
+  const lo = Math.floor(n / 2);                                      // exits go in the second half of the deck
+  for (const id of shuffle(exitIds, rng)) rest.splice(lo + Math.floor(rng() * (rest.length - lo + 1)), 0, id);
+  return { deck: rest, specs, towers: Object.values(specs).filter(sp => sp.tower).length };
 }
 
 // ---------- state ----------
-const key = (x, y) => x + ',' + y;
 function newGame(opts) {
   const seed = (opts.seed >>> 0);
   const difficulty = opts.difficulty || 'normal';
   const startMs = opts.timeMs || CONFIG.timerStartMs;
-  const tilesMode = opts.tiles || 'random';
-  const built = buildDeck(seed, difficulty, tilesMode);
+  const features = { gates: opts.gates || 'off', exits: opts.exits || 'shared', towers: opts.towers || 'off' };
+  const built = buildDeck(seed, difficulty, features);
+  const sets = opts.sets ? opts.sets.map(x => x.slice()) : makeActionSets(mulberry32((seed ^ 0x51ed270b) >>> 0), built.towers > 0);
   const state = {
-    seed, difficulty, startMs, tilesMode,
-    tiles: [], deck: built.deck, defs: built.defs,
+    seed, difficulty, startMs, features,
+    tiles: [], deck: built.deck, specs: built.specs,
     animals: {}, phase: 'forage',
     timeLeftMs: startMs, usedTimers: [],
-    holder: 0, actionSets: [ACTION_SETS[0].slice(), ACTION_SETS[1].slice()],
+    holder: 0, actionSets: sets,
     talkAllowed: false, ping: null, lastHold: [], grabbed: false,
-    // extras (derived or bookkeeping)
-    lattice: {}, cells: {}, walls: {}, wallList: [], logs: {}, logList: [],
+    towersTotal: built.towers, towersDestroyed: 0, towersSeen: 0,
+    gateChance: CONFIG.gateChance[features.gates] || 0,
+    cells: {}, walls: {}, wallList: [], logs: {}, logList: [], gates: {}, gateList: [],
     curHold: [], curReveal: [], lastReveal: [],
-    aiHolder: opts.ai ? 1 : null, recent: [],
+    aiHolder: opts.ai ? 1 : null, recent: [], seen: {}, idlePasses: 0,
     handoffs: 0, moves: 0, paused: false, lastTickMs: null, result: null,
   };
-  placeTile(state, LIB.start, 0, 0, 0);
+  placeTile(state, startDef(), 0, 0);
   for (const a of ANIMALS) state.animals[a] = { pos: { x: START_POS[a][1], y: START_POS[a][0] }, escaped: false };
   return state;
 }
 
-function wallKey(ax, ay, bx, by) { return (ax < bx || (ax === bx && ay < by)) ? key(ax, ay) + '|' + key(bx, by) : key(bx, by) + '|' + key(ax, ay); }
-
-function placeTile(state, def, rot, tx, ty) {
-  const rd = rotateDef(def, rot);
-  const idx = state.tiles.length;
-  state.tiles.push({ def, rotation: rot, tx, ty });
-  state.lattice[key(tx, ty)] = idx;
-  const gx = i => tx * TS + (i % 5), gy = i => ty * TS + Math.floor(i / 5);
-  rd.squares.forEach((sq, i) => {
-    const x = gx(i), y = gy(i);
-    state.cells[key(x, y)] = Object.assign({ x, y, tile: idx, door: null }, sq);
-  });
-  for (const side in rd.doors) {
-    const i = DOOR_IDX[side];
-    state.cells[key(gx(i), gy(i))].door = { side, animal: rd.doors[side] };
-  }
-  rd.walls.forEach(([a, b]) => {
-    state.walls[wallKey(gx(a), gy(a), gx(b), gy(b))] = 1;
-    state.wallList.push([gx(a), gy(a), gx(b), gy(b)]);
-  });
-  rd.logs.forEach(([a, b]) => {
-    state.logs[key(gx(a), gy(a))] = { x: gx(b), y: gy(b) };
-    state.logs[key(gx(b), gy(b))] = { x: gx(a), y: gy(a) };
+function placeTile(state, def, x0, y0) {
+  const { w, h } = def, idx = state.tiles.length;
+  state.tiles.push({ def, x0, y0, w, h });
+  const gx = i => x0 + (i % w), gy = i => y0 + Math.floor(i / w);
+  def.squares.forEach((sq, i) => { state.cells[key(gx(i), gy(i))] = Object.assign({ x: gx(i), y: gy(i), tile: idx, door: null }, sq); });
+  for (const d of def.doors) state.cells[key(gx(doorSq(w, h, d.side, d.i)), gy(doorSq(w, h, d.side, d.i)))].door = { side: d.side, animal: d.animal };
+  const edge = ([a, b]) => [gx(a), gy(a), gx(b), gy(b)];
+  def.walls.forEach(p => { const e = edge(p); state.walls[wallKey(...e)] = 1; state.wallList.push(e); });
+  def.gates.forEach(p => { const e = edge(p); state.gates[wallKey(...e)] = 1; state.gateList.push(e); });
+  def.logs.forEach(([a, b]) => {
+    state.logs[key(gx(a), gy(a))] = { x: gx(b), y: gy(b) }; state.logs[key(gx(b), gy(b))] = { x: gx(a), y: gy(a) };
     state.logList.push([gx(a), gy(a), gx(b), gy(b)]);
   });
+  state.towersSeen += def.towers || 0;
   return idx;
+}
+
+// Flyer gates between touching tiles: for each neighbouring tile there is a chance of one gap in the fence that
+// only the bird and squirrel can cross. Gates are shortcuts only: tiles stay connected without them.
+function addGates(state, idx, rng, chance) {
+  if (!chance) return;
+  const t = state.tiles[idx], byTile = {};
+  for (let r = 0; r < t.h; r++) for (let c = 0; c < t.w; c++) {
+    const a = state.cells[key(t.x0 + c, t.y0 + r)];
+    for (const d of SIDES) {
+      const b = state.cells[key(a.x + DV[d][0], a.y + DV[d][1])];
+      if (!b || b.tile === idx) continue;
+      const okSq = q => q.kind === 'plain' && !q.door && !state.logs[key(q.x, q.y)];
+      if (okSq(a) && okSq(b)) (byTile[b.tile] = byTile[b.tile] || []).push([a, b]);
+    }
+  }
+  for (const tile of Object.keys(byTile)) {
+    if (rng() >= chance) continue;
+    const [a, b] = byTile[tile][Math.floor(rng() * byTile[tile].length)];
+    state.gates[wallKey(a.x, a.y, b.x, b.y)] = 1; state.gateList.push([a.x, a.y, b.x, b.y]);
+  }
 }
 
 // ---------- queries ----------
@@ -533,47 +511,80 @@ function animalAt(state, x, y) {
 const isOver = state => state.phase === 'won' || state.phase === 'lost';
 const holderActions = state => state.actionSets[state.holder];
 function timerUsed(state, x, y) { return state.usedTimers.some(p => p.x === x && p.y === y); }
+// Exits work once the food is grabbed, every exit tile has been found, and every hunting tower is destroyed.
+// (Waiting for all exits keeps exploring possible: an animal that left could no longer open its colour's doorways.)
+function exitsReady(state) {
+  return state.grabbed && state.towersDestroyed >= state.towersTotal && !state.deck.some(id => state.specs[id].kind === 'exit');
+}
 
-// What a square currently does, taking the phase into account.
+// What a square currently does, taking the game state into account.
 function effectiveKind(state, c) {
   switch (c.kind) {
     case 'food': return state.grabbed ? 'taken' : 'food';
     case 'burrow': return state.grabbed ? 'closedBurrow' : 'burrow';
     case 'timer': return timerUsed(state, c.x, c.y) ? 'usedTimer' : 'timer';
-    case 'exit': return state.grabbed ? 'exit' : 'lockedExit';
+    case 'exit': return exitsReady(state) ? 'exit' : 'lockedExit';
   }
   return c.kind;
 }
 
-// Door list for a set of placed tiles. status: open (can be explored), linked (passable), closed.
-function doorwayList(tiles, deckLen) {
-  const occ = {}; tiles.forEach((t, i) => { occ[key(t.tx, t.ty)] = i; });
-  const out = [];
-  tiles.forEach((t, i) => {
-    const rd = rotateDef(t.def, t.rotation);
-    for (const side in rd.doors) {
-      const [dx, dy] = DV[side]; const j = occ[key(t.tx + dx, t.ty + dy)];
-      let status;
-      if (j === undefined) status = deckLen > 0 ? 'open' : 'closed';
-      else status = rotateDef(tiles[j].def, tiles[j].rotation).doors[OPP[side]] ? 'linked' : 'closed';
-      const sq = DOOR_IDX[side];
-      out.push({ tile: i, side, animal: rd.doors[side], status,
-        x: t.tx * TS + (sq % 5), y: t.ty * TS + Math.floor(sq / 5), nx: t.tx + dx, ny: t.ty + dy });
+// ---------- doorways ----------
+const rectsOverlap = (a, b) => a.x0 < b.x0 + b.w && b.x0 < a.x0 + a.w && a.y0 < b.y0 + b.h && b.y0 < a.y0 + a.h;
+// Top-left corner of a new tile of size w x h whose doorway (index i along its side) meets doorway e.
+function candRect(e, w, h, i) {
+  const bx = e.x + DV[e.side][0], by = e.y + DV[e.side][1];
+  switch (e.side) {
+    case 'N': return { x0: bx - i, y0: by - (h - 1) };
+    case 'S': return { x0: bx - i, y0: by };
+    case 'W': return { x0: bx - (w - 1), y0: by - i };
+    default:  return { x0: bx, y0: by - i };
+  }
+}
+// Every size and doorway position for which a new tile fits behind doorway e (no overlap with existing tiles).
+function fitCandidates(tiles, e, limit) {
+  const out = [], horizontal = e.side === 'N' || e.side === 'S';
+  for (let w = CONFIG.tileMin; w <= CONFIG.tileMax; w++) for (let h = CONFIG.tileMin; h <= CONFIG.tileMax; h++) {
+    const len = horizontal ? w : h;
+    for (let i = 1; i <= len - 2; i++) {
+      const { x0, y0 } = candRect(e, w, h, i), r = { x0, y0, w, h };
+      if (!tiles.some(t => rectsOverlap(r, t))) { out.push({ w, h, i, x0, y0 }); if (limit && out.length >= limit) return out; }
     }
-  });
+  }
   return out;
 }
-const doorways = state => doorwayList(state.tiles, state.deck.length);
+// Doorways of a set of placed tiles. status: open (a tile fits behind it and the deck has tiles),
+// linked (passable to the neighbouring tile) or closed.
+function doorwayList(tiles, deckLen) {
+  const map = {}, list = [];
+  tiles.forEach((t, ti) => t.def.doors.forEach(d => {
+    const sq = doorSq(t.w, t.h, d.side, d.i), x = t.x0 + (sq % t.w), y = t.y0 + Math.floor(sq / t.w);
+    map[key(x, y)] = d; list.push({ tile: ti, side: d.side, animal: d.animal, x, y });
+  }));
+  const occupied = (x, y) => tiles.some(t => x >= t.x0 && x < t.x0 + t.w && y >= t.y0 && y < t.y0 + t.h);
+  for (const e of list) {
+    e.bx = e.x + DV[e.side][0]; e.by = e.y + DV[e.side][1];
+    if (occupied(e.bx, e.by)) { const d = map[key(e.bx, e.by)]; e.status = d && d.side === OPP[e.side] ? 'linked' : 'closed'; }
+    else e.status = deckLen > 0 && fitCandidates(tiles, e, 1).length ? 'open' : 'closed';
+  }
+  return list;
+}
+function doorways(state) {
+  const k = state.tiles.length + ':' + state.deck.length;
+  if (state._dwKey !== k) { state._dw = doorwayList(state.tiles, state.deck.length); state._dwKey = k; }
+  return state._dw;
+}
 
 // The square reached by one step from (x,y) in direction d, or null if blocked (ignores animals).
-function stepFrom(state, x, y, d) {
+// Pass the animal to let the bird and squirrel use flyer gates.
+function stepFrom(state, x, y, d, animal) {
   const c1 = cellAt(state, x, y); if (!c1) return null;
-  const nx = x + DV[d][0], ny = y + DV[d][1];
-  const c2 = cellAt(state, nx, ny);
+  const nx = x + DV[d][0], ny = y + DV[d][1], c2 = cellAt(state, nx, ny);
   if (!c2 || c2.kind === 'bush') return null;
-  if (c1.tile === c2.tile) { if (state.walls[wallKey(x, y, nx, ny)]) return null; }
-  else if (!(c1.door && c1.door.side === d && c2.door && c2.door.side === OPP[d])) return null;
-  return c2;
+  let open;
+  if (c1.tile === c2.tile) open = !state.walls[wallKey(x, y, nx, ny)];
+  else open = !!(c1.door && c1.door.side === d && c2.door && c2.door.side === OPP[d]);
+  if (!open && animal && FLYERS.includes(animal) && state.gates[wallKey(x, y, nx, ny)]) open = true;
+  return open ? c2 : null;
 }
 
 // Squares the animal can go to with the actions the holder has now.
@@ -585,7 +596,7 @@ function legalTargets(state, name) {
     const d = ACT_DIR[act]; if (!d) continue;
     let { x, y } = an.pos;
     for (;;) {
-      const c = stepFrom(state, x, y, d);
+      const c = stepFrom(state, x, y, d, name);
       if (!c || animalAt(state, c.x, c.y)) break;
       out.push({ x: c.x, y: c.y, action: act });
       x = c.x; y = c.y;
@@ -595,7 +606,7 @@ function legalTargets(state, name) {
     const l = state.logs[key(an.pos.x, an.pos.y)];
     if (l && !animalAt(state, l.x, l.y)) out.push({ x: l.x, y: l.y, action: 'climb' });
   }
-  if (acts.includes('burrow') && state.phase === 'forage') {
+  if (acts.includes('burrow') && !state.grabbed) {
     // from anywhere: any revealed burrow of the animal's colour that is free and not the square it stands on
     for (const k in state.cells) {
       const c = state.cells[k];
@@ -613,39 +624,42 @@ function exploreDoor(state, name) {
   return doorways(state).find(d => d.x === c.x && d.y === c.y && d.status === 'open') || null;
 }
 function availableActions(state, name) {
-  const acts = holderActions(state), t = legalTargets(state, name);
+  const acts = holderActions(state), t = legalTargets(state, name), an = state.animals[name];
+  const here = an && !an.escaped ? cellAt(state, an.pos.x, an.pos.y) : null;
   return {
     explore: acts.includes('explore') && !isOver(state) && !!exploreDoor(state, name),
     climb: t.some(x => x.action === 'climb'),
     burrow: t.some(x => x.action === 'burrow'),
+    destroy: acts.includes('destroy') && !isOver(state) && name === 'monkey' && !!here && here.kind === 'tower',
   };
 }
 
 // ---------- exploring ----------
-function rotationOrder(seed, id, tx, ty) { return shuffle([0, 1, 2, 3], mulberry32(hashStr(seed + '|' + id + '|' + tx + ',' + ty))); }
-
-// Draw the first tile in the deck that fits behind the doorway. Rotation depends only on (seed, tile, cell),
-// so the same seed and the same exploring order always give the same map.
-function drawTileAt(state, door) {
-  const facing = OPP[door.side];
-  const tryPick = strict => {
-    for (let i = 0; i < state.deck.length; i++) {
-      const def = state.defs[state.deck[i]];
-      for (const rot of rotationOrder(state.seed, def.id, door.nx, door.ny)) {
-        if (!rotateDef(def, rot).doors[facing]) continue;
-        if (strict && state.deck.length > 1) {
-          const hyp = state.tiles.concat([{ def, rotation: rot, tx: door.nx, ty: door.ny }]);
-          if (!doorwayList(hyp, state.deck.length - 1).some(d => d.status === 'open')) continue;
-        }
-        return { i, rot, def };
+// Reveal the next tile behind doorway e: take the first tile in the deck that fits, generate its shape for the
+// space available (random width and height), and keep at least one open doorway on the map while tiles remain.
+// The result depends only on the seed, the tile and the doorway, so the same exploring gives the same map.
+function drawTileAt(state, e) {
+  const facing = OPP[e.side];
+  const attempt = strict => {
+    for (let si = 0; si < state.deck.length; si++) {
+      const spec = state.specs[state.deck[si]];
+      const cands = shuffle(fitCandidates(state.tiles, e), mulberry32(hashStr(state.seed + '|c|' + spec.id + '|' + e.x + ',' + e.y)));
+      for (let ci = 0; ci < cands.length; ci++) {
+        const c = cands[ci];
+        const def = genTile(mulberry32(hashStr(state.seed + '|t|' + spec.id + '|' + e.x + ',' + e.y + '|' + ci)), spec, c.w, c.h, facing, c.i, state.gateChance);
+        const tile = { def, x0: c.x0, y0: c.y0, w: c.w, h: c.h };
+        if (strict && state.deck.length > 1 && !doorwayList(state.tiles.concat([tile]), state.deck.length - 1).some(d => d.status === 'open')) continue;
+        return { si, def, c };
       }
     }
     return null;
   };
-  const pick = tryPick(true) || tryPick(false);
+  const pick = attempt(true) || attempt(false);
   if (!pick) return null;
-  state.deck.splice(pick.i, 1);
-  return placeTile(state, pick.def, pick.rot, door.nx, door.ny);
+  state.deck.splice(pick.si, 1);
+  const idx = placeTile(state, pick.def, pick.c.x0, pick.c.y0);
+  addGates(state, idx, mulberry32(hashStr(state.seed + '|g|' + pick.def.id + '|' + e.x + ',' + e.y)), state.gateChance);
+  return idx;
 }
 
 // ---------- clock ----------
@@ -662,6 +676,19 @@ function finish(state, won) {
 }
 
 // ---------- actions ----------
+function escapeAnimal(state, name, ev) {
+  state.animals[name].escaped = true; ev.push({ type: 'escape', animal: name });
+  if (ANIMALS.every(n => state.animals[n].escaped)) { finish(state, true); ev.push({ type: 'won' }); }
+}
+// Animals waiting on their own exit leave as soon as the exits become ready (last tower destroyed, last exit found).
+function sweepEscapes(state, ev) {
+  if (state.phase !== 'escape' || !exitsReady(state)) return;
+  for (const n of ANIMALS) if (!state.animals[n].escaped && onOwnExit(state, n)) escapeAnimal(state, n, ev);
+}
+function onOwnExit(state, name) {
+  const c = cellAt(state, state.animals[name].pos.x, state.animals[name].pos.y);
+  return !!c && c.kind === 'exit' && (!c.animal || c.animal === name);
+}
 function arrive(state, name, ev) {
   const an = state.animals[name], c = cellAt(state, an.pos.x, an.pos.y);
   if (c.kind === 'timer' && !timerUsed(state, c.x, c.y)) {
@@ -675,12 +702,14 @@ function arrive(state, name, ev) {
     const a = state.animals[n], k = cellAt(state, a.pos.x, a.pos.y);
     return !a.escaped && k.kind === 'food' && k.animal === n;
   })) { state.phase = 'escape'; state.grabbed = true; ev.push({ type: 'grab' }); }
-  if (state.phase === 'escape' && c.kind === 'exit' && !an.escaped) {
-    an.escaped = true; ev.push({ type: 'escape', animal: name });
-    if (ANIMALS.every(n => state.animals[n].escaped)) { finish(state, true); ev.push({ type: 'won' }); }
-  }
+  if (state.phase === 'escape' && !an.escaped && exitsReady(state) && onOwnExit(state, name)) escapeAnimal(state, name, ev);
 }
 
+// An arrangement of the animals (and what has been achieved), used by the AI to notice it is going in circles.
+function configKey(state, move) {
+  return ANIMALS.map(a => { const an = state.animals[a]; const p = move && move.a === a ? move.t : an.pos; return an.escaped ? 'x' : p.x + ',' + p.y; }).join(';')
+    + '|' + state.usedTimers.length + '|' + state.towersDestroyed + '|' + state.deck.length + '|' + (state.grabbed ? 1 : 0);
+}
 function rayPath(from, to) {
   const dx = Math.sign(to.x - from.x), dy = Math.sign(to.y - from.y), p = [];
   let x = from.x, y = from.y;
@@ -689,11 +718,17 @@ function rayPath(from, to) {
 }
 
 function applyAction(state, a) {
+  const res = applyActionInner(state, a);
+  if (res.ok && a.type !== 'pass' && a.type !== 'ping') { const k = configKey(state); state.seen[k] = (state.seen[k] || 0) + 1; }
+  return res;
+}
+function applyActionInner(state, a) {
   if (isOver(state)) return { ok: false, reason: 'over', events: [] };
   const ev = [];
   const fail = reason => ({ ok: false, reason, events: [] });
   switch (a.type) {
     case 'pass': {
+      state.idlePasses = state.curHold.length || state.curReveal.length ? 0 : state.idlePasses + 1;   // holds in a row where nothing happened
       if (state.ping && state.ping.by !== state.holder) state.ping = null;   // seen, passed back
       state.holder = 1 - state.holder; state.handoffs++;
       state.lastHold = state.curHold; state.lastReveal = state.curReveal;
@@ -725,6 +760,7 @@ function applyAction(state, a) {
         to = targets.find(t => t.action === 'burrow' && t.x === a.to.x && t.y === a.to.y); if (!to) return fail('illegal');
       }
       state.talkAllowed = false;
+      state.idlePasses = 0;
       state.recent.push(a.animal + '|' + key(from.x, from.y)); if (state.recent.length > 10) state.recent.shift();
       an.pos = { x: to.x, y: to.y }; state.moves++;
       state.curHold.push({ animal: a.animal, path: a.type === 'move' ? [from].concat(rayPath(from, to)) : [from, { x: to.x, y: to.y }] });
@@ -736,334 +772,36 @@ function applyAction(state, a) {
       if (!holderActions(state).includes('explore')) return fail('notheld');
       const door = exploreDoor(state, a.animal); if (!door) return fail('illegal');
       const idx = drawTileAt(state, door); if (idx == null) return fail('nodraw');
-      state.talkAllowed = false;
+      state.talkAllowed = false; state.idlePasses = 0;
       state.curReveal.push(idx);
       ev.push({ type: 'reveal', tile: idx });
+      sweepEscapes(state, ev);
+      return { ok: true, events: ev };
+    }
+    case 'destroy': {
+      if (!availableActions(state, a.animal).destroy) return fail('illegal');
+      const an = state.animals[a.animal], c = cellAt(state, an.pos.x, an.pos.y);
+      state.talkAllowed = false; state.idlePasses = 0;
+      c.kind = 'plain'; c.rubble = true; state.towersDestroyed++;
+      ev.push({ type: 'destroy', x: c.x, y: c.y, towersLeft: state.towersTotal - state.towersDestroyed });
+      sweepEscapes(state, ev);
       return { ok: true, events: ev };
     }
   }
   return fail('unknown');
 }
 
-// ---------- tests (run from the console: FM.runTests()) ----------
-function connectedInside(d) {                    // d: {squares, walls, logs}
-  const wall = new Set(d.walls.map(([a, b]) => a + '-' + b));
-  const adj = i => {
-    const r = Math.floor(i / 5), c = i % 5, out = [];
-    [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].forEach(([rr, cc]) => {
-      if (rr < 0 || rr > 4 || cc < 0 || cc > 4) return;
-      const j = rr * 5 + cc;
-      if (d.squares[j].kind !== 'bush' && !wall.has(Math.min(i, j) + '-' + Math.max(i, j))) out.push(j);
-    });
-    d.logs.forEach(([a, b]) => { if (a === i) out.push(b); if (b === i) out.push(a); });
-    return out;
-  };
-  const free = d.squares.map((s, i) => i).filter(i => d.squares[i].kind !== 'bush');
-  const seen = new Set([free[0]]), q = [free[0]];
-  while (q.length) for (const j of adj(q.shift())) if (!seen.has(j)) { seen.add(j); q.push(j); }
-  return seen.size === free.length;
-}
-function reachableCells(state, startKey) {       // ignores animals; logs and same-colour burrows count as links
-  const seen = new Set([startKey]), q = [startKey];
-  const burrows = {};
-  for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'burrow') (burrows[c.animal] = burrows[c.animal] || []).push(k); }
-  while (q.length) {
-    const k = q.shift(), c = state.cells[k], next = [];
-    for (const d of SIDES) { const n = stepFrom(state, c.x, c.y, d); if (n) next.push(key(n.x, n.y)); }
-    const l = state.logs[k]; if (l) next.push(key(l.x, l.y));
-    if (c.kind === 'burrow') next.push(...burrows[c.animal]);
-    for (const n of next) if (!seen.has(n)) { seen.add(n); q.push(n); }
-  }
-  return seen;
-}
-function exploreEverything(state) {              // test helper: ignore animals, open every doorway
-  for (let guard = 0; guard < 100 && state.deck.length; guard++) {
-    const d = doorways(state).find(x => x.status === 'open');
-    if (!d) break;
-    drawTileAt(state, d);
-  }
-}
-
-function runTests(verbose) {
-  const results = [];
-  const test = (name, fn) => { try { fn(); results.push({ name, ok: true }); } catch (e) { results.push({ name, ok: false, err: e.message }); } };
-  const assert = (c, m) => { if (!c) throw new Error(m || 'assertion failed'); };
-  const eq = (a, b, m) => assert(a === b, (m || '') + ' expected ' + b + ' got ' + a);
-  const fresh = (seed, diff) => newGame({ seed: seed == null ? 1 : seed, difficulty: diff || 'normal' });
-
-  test('every tile is connected inside, at every rotation, with walkable doors', () => {
-    for (const id in LIB) for (let k = 0; k < 4; k++) {
-      const rd = rotateDef(LIB[id], k);
-      assert(connectedInside(rd), id + ' rot ' + k + ' is not connected');
-      for (const s in rd.doors) assert(rd.squares[DOOR_IDX[s]].kind !== 'bush', id + ' door on bush');
-    }
-  });
-  test('rotating four times is the identity', () => {
-    for (const id in LIB) for (let i = 0; i < 25; i++) eq(rotIndex(i, 4), i, id);
-  });
-  test('deck: foods, exit in second half, exactly 4 timer squares, deterministic (both tile modes)', () => {
-    for (const mode of ['random', 'premade']) for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 40; seed++) {
-      const { deck, defs } = buildDeck(seed, diff, mode), n = CONFIG.tilesPerGame[diff];
-      eq(deck.length, n, 'deck size');
-      eq(new Set(deck).size, n, 'duplicates');
-      FOOD_TILES.forEach(f => assert(deck.includes(f), 'missing ' + f));
-      assert(deck.indexOf('exit') >= Math.floor(n / 2), 'exit too early (' + deck.indexOf('exit') + ' of ' + n + ')');
-      eq(deck.reduce((t, id) => t + defs[id].timers, 0), CONFIG.timerSquares, 'timers');
-      assert(JSON.stringify(buildDeck(seed, diff, mode)) === JSON.stringify({ deck, defs }), 'not deterministic');
-    }
-    assert(JSON.stringify(buildDeck(1, 'normal').deck) !== JSON.stringify(buildDeck(2, 'normal').deck), 'seeds should differ');
-  });
-  test('random tiles: valid at every rotation, one food+burrow per food tile, one exit, walkable doors', () => {
-    const layouts = new Set(); let logs = 0, total = 0;
-    for (let seed = 1; seed <= 150; seed++) {
-      const { defs } = buildDeck(seed, 'hard', 'random');
-      for (const id in defs) {
-        const d = defs[id]; total++; logs += d.logs.length ? 1 : 0;
-        layouts.add(JSON.stringify([d.squares, d.walls, d.doors, d.logs]));
-        assert(Object.keys(d.doors).length >= (id === 'exit' || id.startsWith('food') ? 3 : 2), id + ' too few doors');
-        for (let k = 0; k < 4; k++) {
-          const rd = rotateDef(d, k); assert(connectedInside(rd), id + ' seed ' + seed + ' rot ' + k + ' not connected');
-          for (const sd in rd.doors) eq(rd.squares[DOOR_IDX[sd]].kind, 'plain', 'door square');
-        }
-        const count = (kind, an) => d.squares.filter(q => q.kind === kind && (!an || q.animal === an)).length;
-        if (id.startsWith('food-')) { const a = id.slice(5); eq(count('food'), 1); eq(count('food', a), 1); eq(count('burrow'), 1); eq(count('burrow', a), 1); }
-        else { eq(count('food'), 0); eq(count('burrow'), 0); }
-        eq(count('exit'), id === 'exit' ? 1 : 0); eq(count('timer'), d.timers);
-      }
-    }
-    assert(layouts.size > total * 0.95, 'tiles should rarely repeat: ' + layouts.size + '/' + total);
-    assert(logs > total * 0.03, 'some random tiles should have logs: ' + logs + '/' + total);
-  });
-  test('start: animals next to their doorways, 4 doors open, no overlap', () => {
-    const s = fresh();
-    const open = doorways(s).filter(d => d.status === 'open'); eq(open.length, 4);
-    ANIMALS.forEach(a => { const c = cellAt(s, s.animals[a].pos.x, s.animals[a].pos.y); assert(c && c.kind === 'plain', a + ' start'); });
-  });
-  test('holder can only use their own directions', () => {
-    const s = fresh();                                    // holder 0: up, left, explore
-    assert(!applyAction(s, { type: 'move', animal: 'rabbit', to: { x: 4, y: 2 } }).ok, 'rabbit right should be refused for set A');
-    assert(applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } }).ok, 'squirrel up should work');
-    applyAction(s, { type: 'pass' });
-    assert(applyAction(s, { type: 'move', animal: 'rabbit', to: { x: 4, y: 2 } }).ok, 'rabbit right works for set B');
-  });
-  test('animals block movement and never share a square', () => {
-    const s = fresh();
-    const t = legalTargets(s, 'bird').filter(x => x.action === 'up');        // bird (2,3) up: (2,2) then squirrel at (2,1)
-    eq(t.length, 1); eq(t[0].x, 2); eq(t[0].y, 2);
-    s.animals.monkey.pos = { x: 2, y: 2 };
-    eq(legalTargets(s, 'bird').filter(x => x.action === 'up').length, 0, 'blocked by monkey');
-  });
-  test('bush and walls block; unexplored edges block', () => {
-    const s = fresh();
-    s.animals.squirrel.pos = { x: 0, y: 1 };                                  // (0,0) is a bush
-    eq(legalTargets(s, 'squirrel').filter(x => x.action === 'up').length, 0, 'bush');
-    s.animals.squirrel.pos = { x: 2, y: 0 };                                  // door, nothing behind it yet
-    eq(legalTargets(s, 'squirrel').filter(x => x.action === 'up').length, 0, 'unexplored');
-    s.walls[wallKey(2, 2, 2, 3)] = 1;
-    s.animals.bird.pos = { x: 2, y: 3 }; s.animals.monkey.pos = { x: 1, y: 1 };
-    eq(legalTargets(s, 'bird').filter(x => x.action === 'up').length, 0, 'wall');
-  });
-  test('explore needs own-colour doorway; places a tile that connects; deck shrinks', () => {
-    const s = fresh(7);
-    assert(!applyAction(s, { type: 'explore', animal: 'squirrel' }).ok, 'not on doorway');
-    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } });
-    const deckBefore = s.deck.length;
-    assert(availableActions(s, 'squirrel').explore, 'should be able to explore');
-    assert(applyAction(s, { type: 'explore', animal: 'squirrel' }).ok, 'explore');
-    eq(s.deck.length, deckBefore - 1); eq(s.tiles.length, 2);
-    assert(legalTargets(s, 'squirrel').some(t => t.action === 'up' && t.y === -1), 'can walk into new tile');
-    assert(!availableActions(s, 'squirrel').explore, 'door is used up');
-    eq(s.curReveal.length, 1);
-  });
-  test('explore is refused for a wrong colour animal', () => {
-    const s = fresh(7);
-    s.animals.monkey.pos = { x: 2, y: 0 };                                    // squirrel's doorway
-    assert(!applyAction(s, { type: 'explore', animal: 'monkey' }).ok);
-  });
-  test('timer square resets the clock to full once, swaps sets, allows talking', () => {
-    const s = fresh(); tick(s, 0); tick(s, 50000);
-    const left = s.timeLeftMs; eq(left, 130000);
-    s.cells[key(0, 1)].kind = 'timer'; s.animals.squirrel.pos = { x: 1, y: 1 };
-    const r = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
-    assert(r.ok && r.events.some(e => e.type === 'reset'), 'reset');
-    eq(s.timeLeftMs, CONFIG.timerStartMs, 'time back to full');
-    eq(s.actionSets[0].includes('down'), true, 'sets swapped');
-    assert(s.talkAllowed, 'talk allowed');
-    s.animals.squirrel.pos = { x: 1, y: 1 };
-    applyAction(s, { type: 'pass' });                                         // set A is now holder 1's
-    assert(s.talkAllowed, 'pass keeps talk time');
-    const r2 = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
-    assert(r2.ok && !r2.events.some(e => e.type === 'reset'), 'used square does nothing');
-    assert(!s.talkAllowed, 'talk ends with the next action');
-  });
-  test('grab happens when all four stand on food; burrows close; exit opens', () => {
-    const s = fresh(3); exploreEverything(s);
-    const foods = {}, exit = [];
-    for (const k in s.cells) { const c = s.cells[k]; if (c.kind === 'food') foods[c.animal] = c; if (c.kind === 'exit') exit.push(c); }
-    ANIMALS.forEach(a => { s.animals[a].pos = { x: foods[a].x, y: foods[a].y }; });
-    const ev = []; arrive(s, 'monkey', ev);
-    assert(ev.some(e => e.type === 'grab') && s.phase === 'escape', 'grab');
-    const b = Object.values(s.cells).find(c => c.kind === 'burrow');
-    eq(effectiveKind(s, b), 'closedBurrow');
-    ANIMALS.forEach((a, i) => {
-      s.animals[a].pos = { x: exit[0].x, y: exit[0].y }; const e2 = []; arrive(s, a, e2);
-      assert(e2.some(e => e.type === 'escape'), a + ' escapes');
-      if (i < 3) eq(s.phase, 'escape'); else eq(s.phase, 'won');
-    });
-    eq(s.result.won, true);
-  });
-  test('a loss during foraging does not look like a grab', () => {
-    const s = fresh(); tick(s, 0); tick(s, CONFIG.timerStartMs + 1);
-    eq(effectiveKind(s, Object.values(s.cells).find(c => c.kind === 'burrow')), 'burrow');
-  });
-  test('standing on food early does nothing; exit is locked before the grab', () => {
-    const s = fresh(3); exploreEverything(s);
-    const f = Object.values(s.cells).find(c => c.kind === 'food' && c.animal === 'rabbit');
-    s.animals.rabbit.pos = { x: f.x, y: f.y }; const ev = []; arrive(s, 'rabbit', ev); eq(ev.length, 0);
-    const x = Object.values(s.cells).find(c => c.kind === 'exit');
-    s.animals.bird.pos = { x: x.x, y: x.y }; arrive(s, 'bird', ev);
-    eq(s.animals.bird.escaped, false, 'cannot escape before grab');
-  });
-  test('burrow: from anywhere to a free burrow of own colour, only before the grab', () => {
-    const s = fresh(5); exploreEverything(s);
-    const mine = Object.values(s.cells).filter(c => c.kind === 'burrow' && c.animal === 'rabbit'); eq(mine.length, CONFIG.burrowsPerAnimal);
-    applyAction(s, { type: 'pass' });                                         // set B has burrow
-    assert(availableActions(s, 'rabbit').burrow, 'available from a plain square');
-    const other = Object.values(s.cells).find(c => c.kind === 'burrow' && c.animal === 'squirrel');
-    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: other.x, y: other.y } }).ok, 'not to another colour');
-    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'teleport from anywhere');
-    eq(s.animals.rabbit.pos.x, mine[1].x);
-    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'not onto the square it stands on');
-    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[0].x, y: mine[0].y } }).ok, 'and back');
-    s.animals.squirrel.pos = { x: mine[1].x, y: mine[1].y };
-    eq(legalTargets(s, 'rabbit').filter(t => t.action === 'burrow').length, 0, 'other burrow occupied');
-    s.animals.squirrel.pos = { x: 1, y: 2 }; s.phase = 'escape';
-    assert(!availableActions(s, 'rabbit').burrow, 'closed after grab');
-  });
-  test('logs: climb to the other end', () => {
-    let s = null;
-    for (let seed = 1; seed < 200 && !s; seed++) { const g = fresh(seed, 'hard'); exploreEverything(g); if (g.logList.length) s = g; }
-    assert(s, 'a log should appear in some game');
-    const [ax, ay, bx, by] = s.logList[0];
-    ANIMALS.forEach((a, i) => { s.animals[a].pos = { x: -50 - i, y: -50 }; });
-    s.animals.squirrel.pos = { x: ax, y: ay }; applyAction(s, { type: 'pass' });
-    assert(availableActions(s, 'squirrel').climb, 'climb available');
-    assert(applyAction(s, { type: 'climb', animal: 'squirrel' }).ok, 'climb');
-    eq(s.animals.squirrel.pos.x, bx); eq(s.animals.squirrel.pos.y, by);
-  });
-  test('timer runs from timestamps and ends the game; pause stops it', () => {
-    const s = fresh(); tick(s, 1000); tick(s, 2000); eq(s.timeLeftMs, CONFIG.timerStartMs - 1000);
-    s.paused = true; tick(s, 12000); eq(s.timeLeftMs, CONFIG.timerStartMs - 1000, 'paused');
-    s.paused = false; tick(s, 12000 + CONFIG.timerStartMs + 5);
-    eq(s.phase, 'lost'); eq(s.timeLeftMs, 0);
-    assert(!applyAction(s, { type: 'pass' }).ok, 'no actions after the end');
-  });
-  test('ping: replaced by a new one, seen by the next holder, cleared when passed back', () => {
-    const s = fresh();
-    applyAction(s, { type: 'ping', at: { x: 1, y: 1 } }); applyAction(s, { type: 'ping', at: { x: 3, y: 3 } });
-    eq(s.ping.x, 3); applyAction(s, { type: 'pass' }); assert(s.ping, 'next holder sees it');
-    applyAction(s, { type: 'pass' }); assert(!s.ping, 'gone after passing back');
-  });
-  test('catch-up: previous hold is recorded and tiles revealed are tracked', () => {
-    const s = fresh(2);
-    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } });
-    applyAction(s, { type: 'explore', animal: 'squirrel' });
-    applyAction(s, { type: 'pass' });
-    eq(s.lastHold.length, 1); eq(s.lastHold[0].path.length, 2); eq(s.lastReveal.length, 1);
-    eq(s.handoffs, 1); eq(s.curHold.length, 0);
-  });
-  test('custom start time: used at start and by the timer square', () => {
-    const s = newGame({ seed: 1, difficulty: 'easy', timeMs: 90000 });
-    eq(s.timeLeftMs, 90000); tick(s, 0); tick(s, 30000);
-    s.cells[key(0, 1)].kind = 'timer'; s.animals.squirrel.pos = { x: 1, y: 1 };
-    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
-    eq(s.timeLeftMs, 90000, 'reset to the chosen time');
-  });
-  test('AI: picks a legal action from the start and can hint at an animal for its partner', () => {
-    const s = fresh(9, 'easy');
-    for (const who of [0, 1]) {
-      const a = aiChoose(s, who); assert(a && ['move', 'explore', 'climb', 'burrow', 'pass'].includes(a.type));
-      if (a.type !== 'pass') { s.holder = who; assert(applyAction(JSON.parse(JSON.stringify(s)), a).ok, 'AI action must be legal: ' + JSON.stringify(a)); }
-    }
-    s.holder = 0;
-    const hint = aiHint(s, 0); assert(hint === null || cellAt(s, hint.x, hint.y), 'hint is a real square');
-    eq(s.holder, 0, 'aiChoose must not change whose turn it is');
-  });
-  test('AI: plays both sides and wins easy games, with random and premade tiles, never an illegal move', () => {
-    for (const tiles of ['random', 'premade']) for (let seed = 1; seed <= 4; seed++) {
-      const r = selfPlay({ seed, difficulty: 'easy', tiles, timeMs: 600000 });
-      assert(!r.stuck, tiles + ' seed ' + seed + ' got stuck'); assert(r.won, tiles + ' seed ' + seed + ' not won');
-    }
-  });
-  test('AI: handles a hard random map without getting stuck or looping', () => {
-    for (let seed = 1; seed <= 2; seed++) { const r = selfPlay({ seed, difficulty: 'hard', tiles: 'random', timeMs: 900000 }); assert(r.won, 'seed ' + seed + (r.stuck ? ' stuck' : ' not won')); }
-  });
-  test('AI: a partner ping on a doorway sends that doorway\'s animal there', () => {
-    const s = fresh(9, 'hard');                                   // holder 1 has Down/Right: bird -> south door, rabbit -> east door
-    const door = col => { const d = doorways(s).find(d => d.animal === col && d.status === 'open'); return d; };
-    for (const col of ['bird', 'rabbit']) {
-      const d = door(col); s.ping = { x: d.x, y: d.y, by: 0 };
-      const c = aiChoose(s, 1);
-      assert(c.type === 'move' && c.animal === col && c.to.x === d.x && c.to.y === d.y, 'ping on the ' + col + ' door should send the ' + col + ': ' + JSON.stringify(c));
-    }
-    s.ping = { x: door('bird').x, y: door('bird').y, by: 1 };    // the AI's own ping is not an instruction to itself
-    assert(aiChoose(s, 1), 'still decides');
-  });
-  test('move cap per hold', () => {
-    const old = CONFIG.moveCapPerHold; CONFIG.moveCapPerHold = 1;
-    try {
-      const s = fresh(); assert(applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } }).ok);
-      assert(!applyAction(s, { type: 'move', animal: 'monkey', to: { x: 0, y: 2 } }).ok, 'cap reached');
-    } finally { CONFIG.moveCapPerHold = old; }
-  });
-  test('generator: same seed gives the same map when explored the same way', () => {
-    const a = fresh(11), b = fresh(11); exploreEverything(a); exploreEverything(b);
-    eq(JSON.stringify(a.tiles.map(t => [t.def.id, t.rotation, t.tx, t.ty])), JSON.stringify(b.tiles.map(t => [t.def.id, t.rotation, t.tx, t.ty])));
-  });
-  test('generator guarantees: whole deck placed, tiles never overlap, everything reachable (both modes, all difficulties, many seeds)', () => {
-    for (const mode of ['random', 'premade']) for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 60; seed++) {
-      const s = newGame({ seed, difficulty: diff, tiles: mode }); exploreEverything(s);
-      eq(s.deck.length, 0, diff + ' seed ' + seed + ' deck not emptied');
-      eq(s.tiles.length, CONFIG.tilesPerGame[diff] + 1);
-      eq(Object.keys(s.lattice).length, s.tiles.length, 'overlap');
-      const reach = reachableCells(s, key(START_POS.squirrel[1], START_POS.squirrel[0]));
-      for (const k in s.cells) { const c = s.cells[k]; if (c.kind !== 'bush') assert(reach.has(k), mode + ' ' + diff + ' seed ' + seed + ': unreachable ' + c.kind + ' at ' + k); }
-    }
-  });
-  test('generator: while tiles remain an open doorway always exists (exploring through random doors)', () => {
-    for (let seed = 1; seed <= 60; seed++) {
-      const s = newGame({ seed, difficulty: 'hard', tiles: seed % 2 ? 'random' : 'premade' }); const rng = mulberry32(seed);
-      while (s.deck.length) {
-        const open = doorways(s).filter(d => d.status === 'open');
-        assert(open.length > 0, 'seed ' + seed + ' ran out of open doorways with ' + s.deck.length + ' tiles left');
-        drawTileAt(s, open[Math.floor(rng() * open.length)]);
-      }
-    }
-  });
-  test('closed doorways once the deck is empty', () => {
-    const s = fresh(4, 'easy'); exploreEverything(s);
-    eq(doorways(s).filter(d => d.status === 'open').length, 0);
-  });
-
-  const failed = results.filter(r => !r.ok);
-  if (typeof console !== 'undefined') {
-    results.forEach(r => (verbose !== false || !r.ok) && console.log((r.ok ? '✓ ' : '✗ ') + r.name + (r.ok ? '' : '\n    ' + r.err)));
-    console.log(failed.length ? failed.length + ' of ' + results.length + ' tests FAILED' : 'All ' + results.length + ' tests passed');
-  }
-  return { passed: results.length - failed.length, failed: failed.length, results };
-}
-
 // ---------- AI partner ----------
-// The AI plays one action set. For each animal it has a goal (its food, then the exit, or a doorway when
-// the map still has to be explored). It measures how far each square is from the goal in "straight-line
-// moves" (a move of any length costs the same, plus a small length term) and picks the legal move, with
-// the actions it holds right now, that gets an animal closest. When nothing helps it passes the phone.
+// The AI plays one action set. For each animal it has a goal (its food, then the monkey's towers, then the exits,
+// or a doorway when the map still has to be explored). It measures how far each square is from the goal in
+// "straight-line moves" (a move of any length costs the same, plus a small length term) and picks the legal move,
+// with the actions it holds right now, that gets an animal closest. When nothing helps it passes the phone.
 const AI_SEG = 100;
 function aiDist(state, startKey, animal, reverse, block) {   // block: optional Set of squares slides cannot enter
   // Dijkstra over squares. Edges: straight slides (ignoring animals), logs, burrow jumps (not after the grab).
   const dist = { [startKey]: 0 }, done = {}, open = [[0, startKey]];
   const burrow = new Set();
-  if (!state.grabbed) for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'burrow' && c.animal === animal) burrow.add(k); }
+  if (!state.grabbed) for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'burrow' && c.animal === animal && !animalAt(state, c.x, c.y)) burrow.add(k); }   // only free burrows can be jumped to
   const relax = (k, d) => { if (dist[k] === undefined || d < dist[k]) { dist[k] = d; open.push([d, k]); } };
   if (!reverse) burrow.forEach(k => relax(k, AI_SEG + 2));          // forward: jump from the start square
   while (open.length) {
@@ -1073,9 +811,11 @@ function aiDist(state, startKey, animal, reverse, block) {   // block: optional 
     const c = state.cells[k];
     for (const dir of SIDES) {
       let x = c.x, y = c.y, len = 0;
-      for (;;) { const n = stepFrom(state, x, y, dir); if (!n || (block && block.has(key(n.x, n.y)))) break; x = n.x; y = n.y; len++; relax(key(x, y), d + AI_SEG + len); }
+      for (;;) { const n = stepFrom(state, x, y, dir, animal); if (!n || (block && block.has(key(n.x, n.y)))) break; x = n.x; y = n.y; len++; relax(key(x, y), d + AI_SEG + len); }
     }
-    const l = state.logs[k]; if (l) relax(key(l.x, l.y), d + AI_SEG + 2);
+    const l = state.logs[k];     // a log can only be climbed onto a square that is free (the landing square: k when planning backwards)
+    const taken = (x, y) => { const o = animalAt(state, x, y); return o && o !== animal; };
+    if (l && !taken(reverse ? c.x : l.x, reverse ? c.y : l.y)) relax(key(l.x, l.y), d + AI_SEG + 2);
     if (reverse && burrow.has(k)) for (const sk in state.cells) relax(sk, d + AI_SEG + 2);   // anyone can jump to this burrow
   }
   return dist;
@@ -1087,16 +827,29 @@ function aiChoose(state, who) {
   const saved = state.holder; if (who != null) state.holder = who;
   try {
     const me = state.holder, acts = holderActions(state);
-    const foods = {}; let exitCell = null;
-    for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'food') foods[c.animal] = c; else if (c.kind === 'exit') exitCell = c; }
+    const foods = {}, exits = {}, towerCells = []; let sharedExit = null;
+    for (const k in state.cells) {
+      const c = state.cells[k];
+      if (c.kind === 'food') foods[c.animal] = c;
+      else if (c.kind === 'exit') { if (c.animal) exits[c.animal] = c; else sharedExit = c; }
+      else if (c.kind === 'tower') towerCells.push(c);
+    }
+    ANIMALS.forEach(a => { if (!exits[a] && sharedExit) exits[a] = sharedExit; });
     const open = doorways(state).filter(d => d.status === 'open');
     const posKey = a => key(state.animals[a].pos.x, state.animals[a].pos.y);
     const alive = ANIMALS.filter(a => !state.animals[a].escaped);
     const focus = state.ping && state.ping.by !== me ? state.ping : null;      // the partner's ping
     const lowTime = state.timeLeftMs < state.startMs * 0.4;
 
+    // 0. the monkey stands on a hunting tower and can destroy it
+    if (acts.includes('destroy') && alive.includes('monkey') && cellAt(state, state.animals.monkey.pos.x, state.animals.monkey.pos.y).kind === 'tower')
+      return { type: 'destroy', animal: 'monkey' };
+
     // 1. is more of the map needed? then someone has to explore
-    const needExplore = state.deck.length > 0 && open.length > 0 && (state.grabbed ? !exitCell : ANIMALS.some(a => !foods[a]));
+    const exitInDeck = state.deck.some(id => state.specs[id].kind === 'exit');
+    const towersUnseen = state.towersTotal - state.towersSeen;
+    const needExplore = state.deck.length > 0 && open.length > 0 &&
+      (state.grabbed ? (exitInDeck || towersUnseen > 0) : ANIMALS.some(a => !foods[a]));
     let explorer = null;
     if (needExplore) {
       let best = Infinity;
@@ -1118,18 +871,27 @@ function aiChoose(state, who) {
       return { type: 'explore', animal: explorer.animal };
 
     // 2. goals
+    let monkeyTower = null;
+    if (state.grabbed && towerCells.length && alive.includes('monkey') && !(explorer && explorer.animal === 'monkey')) {
+      const fwd = aiDist(state, posKey('monkey'), 'monkey', false); let bd = Infinity;
+      for (const t of towerCells) { const d = fwd[key(t.x, t.y)]; if (d !== undefined && d < bd) { bd = d; monkeyTower = key(t.x, t.y); } }
+    }
     const goal = {};
     for (const a of alive) {
       if (explorer && explorer.animal === a) goal[a] = key(explorer.door.x, explorer.door.y);
       else if (!state.grabbed) goal[a] = foods[a] ? key(foods[a].x, foods[a].y) : null;
-      else goal[a] = exitCell ? key(exitCell.x, exitCell.y) : null;
+      else if (a === 'monkey' && monkeyTower) goal[a] = monkeyTower;
+      else goal[a] = exits[a] && state.towersDestroyed >= state.towersTotal ? key(exits[a].x, exits[a].y) : null;   // while towers stand, nobody crowds the exit
     }
-
     state.aiInfo = { who: me, explorer: explorer && { animal: explorer.animal, x: explorer.door.x, y: explorer.door.y }, goal };   // for debugging
+
     // 3. best improving move with the actions held now
     let best = null, bestTimer = null;     // bestTimer: last-resort moves (unused timer squares, stepping straight back)
     const consider = (a, t, gain, newD, soft) => {
+      if (state.curHold.some(h => h.animal === a && h.path[0].x === t.x && h.path[0].y === t.y)) return;   // never undo a move made in this same hold
       if (!soft && state.recent.includes(a + '|' + key(t.x, t.y))) soft = true;      // going straight back: last resort
+      const seenN = state.seen[configKey(state, { a, t })] || 0;
+      if (seenN >= 2) soft = true;                                                   // we have been here before
       if (focus && focus.x === state.animals[a].pos.x && focus.y === state.animals[a].pos.y) gain += 300;
       const slot = soft ? bestTimer : best;
       if (!slot || gain > slot.gain || (gain === slot.gain && newD < slot.newD)) { const v = { a, t, gain, newD }; if (soft) bestTimer = v; else best = v; }
@@ -1167,18 +929,19 @@ function aiChoose(state, who) {
         if (occ && occ !== y) addBlocker(occ, [goal[y]]);
         for (const dir of SIDES) {
           const line = []; let x = state.animals[y].pos.x, yy = state.animals[y].pos.y;
-          for (;;) { const n = stepFrom(state, x, yy, dir); if (!n) break; x = n.x; yy = n.y; line.push(key(x, yy)); }
+          for (;;) { const n = stepFrom(state, x, yy, dir, y); if (!n) break; x = n.x; yy = n.y; line.push(key(x, yy)); }
           const bi = line.findIndex(k => { const c = state.cells[k]; return animalAt(state, c.x, c.y); });
           if (bi < 0 || !line.slice(bi).some(k => map[k] !== undefined && map[k] < cur)) continue;
-          const c = state.cells[line[bi]]; addBlocker(animalAt(state, c.x, c.y), line);
+          const c = state.cells[line[bi]]; addBlocker(animalAt(state, c.x, c.y), line.slice(0, bi + 1));   // moving further along the path still frees the squares before it
         }
       }
+      state.aiInfo.blockers = Object.keys(avoid);
       for (const x in avoid) {
         const pos = state.animals[x].pos, map = goal[x] ? aiDist(state, goal[x], x, true) : null, here = map ? map[key(pos.x, pos.y)] : 0;
         if (map && here > 0) {                          // mid-route and able to progress with some action set: it will move on by itself
-          const saved = state.actionSets[me]; state.actionSets[me] = ['up', 'down', 'left', 'right', 'climb', 'burrow'];
+          const savedSet = state.actionSets[me]; state.actionSets[me] = ['up', 'down', 'left', 'right', 'climb', 'burrow'];
           let progress = false;
-          try { progress = legalTargets(state, x).some(t => map[key(t.x, t.y)] !== undefined && map[key(t.x, t.y)] < here); } finally { state.actionSets[me] = saved; }
+          try { progress = legalTargets(state, x).some(t => map[key(t.x, t.y)] !== undefined && map[key(t.x, t.y)] < here); } finally { state.actionSets[me] = savedSet; }
           if (progress) continue;
         }
         for (const t of legalTargets(state, x)) {
@@ -1190,6 +953,28 @@ function aiChoose(state, who) {
       }
     }
     if (!best) best = bestTimer;
+    // Going round in circles (every useful move recreates an arrangement seen 3+ times)? Shake things up with a
+    // random legal move that leads somewhere new, so the AI can never be stuck in a loop.
+    if (best && (state.seen[configKey(state, best)] || 0) >= 3) {
+      const rng = mulberry32((state.seed + state.moves * 7919) >>> 0), options = [];
+      for (const a of alive) for (const t of legalTargets(state, a)) {
+        const c = cellAt(state, t.x, t.y);
+        if (c.kind === 'timer' && !timerUsed(state, c.x, c.y)) continue;
+        if (!(state.seen[configKey(state, { a, t })] >= 1)) options.push({ a, t });
+      }
+      if (options.length) { const o = options[Math.floor(rng() * options.length)]; best = { a: o.a, t: o.t }; }
+    }
+    // Both players have just passed with nothing to do (e.g. two animals that must swap places in a tiny room):
+    // try a random legal move to an arrangement not seen before, then carry on planning from there.
+    if (!best && state.idlePasses >= 2) {
+      const rng = mulberry32((state.seed + state.moves * 104729 + state.idlePasses) >>> 0), options = [];
+      for (const a of alive) for (const t of legalTargets(state, a)) {
+        const c = cellAt(state, t.x, t.y);
+        if (c.kind === 'timer' && !timerUsed(state, c.x, c.y)) continue;
+        if (!(state.seen[configKey(state, { a, t })] >= 1)) options.push({ a, t });
+      }
+      if (options.length) { const o = options[Math.floor(rng() * options.length)]; best = { a: o.a, t: o.t }; }
+    }
     if (!best) return { type: 'pass' };
     const { a, t } = best;
     if (t.action === 'climb') return { type: 'climb', animal: a };
@@ -1209,11 +994,11 @@ function aiHint(state, who) {
 function selfPlay(opts) {
   const s = newGame(opts), MOVE_MS = opts.moveMs || 1500, PASS_MS = opts.passMs || 1500, CAP = opts.cap || 6;
   let t = 0, holdMoves = 0, emptyHolds = 0; tick(s, 0);
-  for (let guard = 0; guard < 4000 && !isOver(s); guard++) {
+  for (let guard = 0; guard < 5000 && !isOver(s); guard++) {
     const a = aiChoose(s);
     if (!a || a.type === 'pass' || holdMoves >= CAP) {
       if (holdMoves === 0) emptyHolds++; else emptyHolds = 0;
-      if (emptyHolds >= 3) return { won: false, stuck: true, s };
+      if (emptyHolds >= 6) return { won: false, stuck: true, s };
       applyAction(s, { type: 'pass' }); holdMoves = 0; t += PASS_MS;
     } else {
       const r = applyAction(s, a); if (!r.ok) throw new Error('AI chose an illegal action ' + JSON.stringify(a) + ' ' + r.reason);
@@ -1224,8 +1009,418 @@ function selfPlay(opts) {
   return { won: s.phase === 'won', stuck: false, s };
 }
 
-const FM = { aiDist, aiChoose, aiHint, selfPlay, CONFIG, ANIMALS, INFO, LIB, buildDeck, SIDES, DV, ACT_DIR, key, newGame, tick, applyAction, legalTargets, availableActions,
-  exploreDoor, doorways, cellAt, animalAt, effectiveKind, timerUsed, isOver, holderActions, arrive, runTests, hashStr, mulberry32 };
+// ---------- tests (run from the console: FM.runTests()) ----------
+function connectedInside(d) {                    // d: {w, h, squares, walls, logs}; flyer gates do not count
+  const { w, h } = d, wall = new Set(d.walls.map(([a, b]) => a + '-' + b));
+  const adj = i => {
+    const r = Math.floor(i / w), c = i % w, out = [];
+    [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].forEach(([rr, cc]) => {
+      if (rr < 0 || rr >= h || cc < 0 || cc >= w) return;
+      const j = rr * w + cc;
+      if (d.squares[j].kind !== 'bush' && !wall.has(Math.min(i, j) + '-' + Math.max(i, j))) out.push(j);
+    });
+    d.logs.forEach(([a, b]) => { if (a === i) out.push(b); if (b === i) out.push(a); });
+    return out;
+  };
+  const free = d.squares.map((s, i) => i).filter(i => d.squares[i].kind !== 'bush');
+  const seen = new Set([free[0]]), q = [free[0]];
+  while (q.length) for (const j of adj(q.shift())) if (!seen.has(j)) { seen.add(j); q.push(j); }
+  return seen.size === free.length;
+}
+function reachableCells(state, startKey) {       // ignores animals AND flyer gates; logs and same-colour burrows count as links
+  const seen = new Set([startKey]), q = [startKey];
+  const burrows = {};
+  for (const k in state.cells) { const c = state.cells[k]; if (c.kind === 'burrow') (burrows[c.animal] = burrows[c.animal] || []).push(k); }
+  while (q.length) {
+    const k = q.shift(), c = state.cells[k], next = [];
+    for (const d of SIDES) { const n = stepFrom(state, c.x, c.y, d); if (n) next.push(key(n.x, n.y)); }
+    const l = state.logs[k]; if (l) next.push(key(l.x, l.y));
+    if (c.kind === 'burrow') next.push(...burrows[c.animal]);
+    for (const n of next) if (!seen.has(n)) { seen.add(n); q.push(n); }
+  }
+  return seen;
+}
+function exploreEverything(state, rng) {         // test helper: ignore animals, open every doorway (random order if rng given)
+  for (let guard = 0; guard < 200 && state.deck.length; guard++) {
+    const open = doorways(state).filter(x => x.status === 'open');
+    if (!open.length) break;
+    drawTileAt(state, rng ? open[Math.floor(rng() * open.length)] : open[0]);
+  }
+}
+
+function runTests(verbose) {
+  const results = [];
+  const test = (name, fn) => { try { fn(); results.push({ name, ok: true }); } catch (e) { results.push({ name, ok: false, err: e.message }); } };
+  const assert = (c, m) => { if (!c) throw new Error(m || 'assertion failed'); };
+  const eq = (a, b, m) => assert(a === b, (m || '') + ' expected ' + b + ' got ' + a);
+  const fresh = (seed, diff, extra) => newGame(Object.assign({ seed: seed == null ? 1 : seed, difficulty: diff || 'normal', sets: DEFAULT_SETS }, extra || {}));
+  const FEATURES = [{}, { gates: 'many', exits: 'each', towers: 'many' }, { gates: 'some' }, { exits: 'each' }, { towers: 'some' }];
+  const allCells = s => Object.values(s.cells);
+
+  test('action sets: exactly 2 directions each, everything held by exactly one player, deterministic and varied', () => {
+    const pairs = new Set();
+    for (const destroy of [false, true]) for (let seed = 1; seed <= 300; seed++) {
+      const sets = makeActionSets(mulberry32(seed), destroy), all = sets[0].concat(sets[1]);
+      for (const s of sets) {
+        eq(s.filter(a => ACT_DIR[a]).length, 2, 'directions per player');
+        assert(s.some(a => !ACT_DIR[a]), 'each player needs one of the other actions');
+      }
+      eq(all.length, destroy ? 8 : 7); eq(new Set(all).size, all.length, 'no action held twice');
+      DIR_ACTIONS.concat(['explore', 'climb', 'burrow'], destroy ? ['destroy'] : []).forEach(a => assert(all.includes(a), 'missing ' + a));
+      assert(!all.includes('destroy') || destroy);
+      assert(JSON.stringify(sets) === JSON.stringify(makeActionSets(mulberry32(seed), destroy)), 'not deterministic');
+      pairs.add(sets[0].filter(a => ACT_DIR[a]).join());
+    }
+    assert(pairs.size >= 5, 'random direction pairs should vary: ' + pairs.size);
+  });
+  test('new games get random action sets from the seed (and destroy only with hunting towers)', () => {
+    const a = newGame({ seed: 5 }), b = newGame({ seed: 5 }), c = newGame({ seed: 6 });
+    assert(JSON.stringify(a.actionSets) === JSON.stringify(b.actionSets), 'same seed, same sets');
+    assert(a.actionSets.flat().length === 7 && !a.actionSets.flat().includes('destroy'));
+    assert(newGame({ seed: 5, towers: 'few' }).actionSets.flat().includes('destroy'), 'towers add destroy');
+    let differ = false; for (let s = 1; s < 20; s++) if (JSON.stringify(newGame({ seed: s }).actionSets) !== JSON.stringify(a.actionSets)) differ = true;
+    assert(differ, 'sets vary between seeds');
+  });
+  test('deck: foods, exits in the second half, exactly 4 timer squares, right tower count, deterministic', () => {
+    for (const feat of FEATURES) for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 30; seed++) {
+      const { deck, specs, towers } = buildDeck(seed, diff, feat), each = feat.exits === 'each';
+      const n = CONFIG.tilesPerGame[diff] + (each ? 3 : 0);
+      eq(deck.length, n, 'deck size'); eq(new Set(deck).size, n, 'duplicates');
+      ANIMALS.forEach(a => assert(deck.includes('food-' + a), 'missing food-' + a));
+      const exits = deck.filter(id => specs[id].kind === 'exit'); eq(exits.length, each ? 4 : 1);
+      exits.forEach(id => assert(deck.indexOf(id) >= Math.floor(n / 2), 'exit too early'));
+      if (each) eq(new Set(exits.map(id => specs[id].animal)).size, 4, 'one exit per animal');
+      eq(deck.filter(id => specs[id].timer).length, CONFIG.timerSquares, 'timers');
+      eq(towers, CONFIG.towerCount[feat.towers] || 0, 'towers'); eq(deck.filter(id => specs[id].tower).length, towers);
+      assert(JSON.stringify(buildDeck(seed, diff, feat)) === JSON.stringify({ deck, specs, towers }), 'not deterministic');
+    }
+    assert(JSON.stringify(buildDeck(1, 'normal').deck) !== JSON.stringify(buildDeck(2, 'normal').deck), 'seeds should differ');
+  });
+  test('tiles are generated when revealed: random size 3-7 x 3-7, valid, with the right contents', () => {
+    const sizes = new Set(); let logs = 0, total = 0;
+    for (const feat of FEATURES) for (let seed = 1; seed <= 25; seed++) {
+      const s = newGame({ seed, difficulty: 'hard', sets: DEFAULT_SETS, gates: feat.gates, exits: feat.exits, towers: feat.towers }); exploreEverything(s);
+      s.tiles.slice(1).forEach(t => {
+        const d = t.def; total++; logs += d.logs.length ? 1 : 0; sizes.add(d.w + 'x' + d.h);
+        assert(d.w >= 3 && d.w <= 7 && d.h >= 3 && d.h <= 7, 'size ' + d.w + 'x' + d.h);
+        eq(d.squares.length, d.w * d.h); assert(connectedInside(d), d.id + ' seed ' + seed + ' not connected');
+        assert(d.doors.length >= (d.kind === 'generic' ? 2 : 3), 'too few doors');
+        d.doors.forEach(dr => {
+          const len = (dr.side === 'N' || dr.side === 'S') ? d.w : d.h;
+          assert(dr.i >= 1 && dr.i <= len - 2, 'doorway in a corner or off the side');
+          eq(d.squares[doorSq(d.w, d.h, dr.side, dr.i)].kind, 'plain', 'doorway square must be walkable');
+        });
+        const count = (kind, an) => d.squares.filter(q => q.kind === kind && (!an || q.animal === an)).length;
+        if (d.kind === 'food') { const a = d.id.slice(5); eq(count('food'), 1); eq(count('food', a), 1); eq(count('burrow'), 1); eq(count('burrow', a), 1); }
+        else { eq(count('food'), 0); eq(count('burrow'), 0); }
+        eq(count('exit'), d.kind === 'exit' ? 1 : 0); eq(count('timer'), d.timers); eq(count('tower'), d.towers);
+      });
+    }
+    assert(sizes.size >= 20, 'many different sizes should appear: ' + sizes.size);
+    assert(sizes.has('3x3') && sizes.has('7x7') && sizes.has('3x7') && sizes.has('7x3'), 'extreme sizes appear');
+    assert(logs > total * 0.03, 'some tiles should have logs: ' + logs + '/' + total);
+  });
+  test('start: animals next to their doorways, 4 doors open, no overlap', () => {
+    const s = fresh();
+    eq(doorways(s).filter(d => d.status === 'open').length, 4);
+    ANIMALS.forEach(a => { const c = cellAt(s, s.animals[a].pos.x, s.animals[a].pos.y); assert(c && c.kind === 'plain', a + ' start'); });
+  });
+  test('holder can only use their own directions', () => {
+    const s = fresh();                                    // holder 0: up, left, explore
+    assert(!applyAction(s, { type: 'move', animal: 'rabbit', to: { x: 4, y: 2 } }).ok, 'rabbit right should be refused for set A');
+    assert(applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } }).ok, 'squirrel up should work');
+    applyAction(s, { type: 'pass' });
+    assert(applyAction(s, { type: 'move', animal: 'rabbit', to: { x: 4, y: 2 } }).ok, 'rabbit right works for set B');
+  });
+  test('animals block movement and never share a square', () => {
+    const s = fresh();
+    const t = legalTargets(s, 'bird').filter(x => x.action === 'up');        // bird (2,3) up: (2,2) then squirrel at (2,1)
+    eq(t.length, 1); eq(t[0].x, 2); eq(t[0].y, 2);
+    s.animals.monkey.pos = { x: 2, y: 2 };
+    eq(legalTargets(s, 'bird').filter(x => x.action === 'up').length, 0, 'blocked by monkey');
+  });
+  test('bush and walls block; unexplored edges block', () => {
+    const s = fresh();
+    s.animals.squirrel.pos = { x: 0, y: 1 };                                  // (0,0) is a bush
+    eq(legalTargets(s, 'squirrel').filter(x => x.action === 'up').length, 0, 'bush');
+    s.animals.squirrel.pos = { x: 2, y: 0 };                                  // door, nothing behind it yet
+    eq(legalTargets(s, 'squirrel').filter(x => x.action === 'up').length, 0, 'unexplored');
+    s.walls[wallKey(2, 2, 2, 3)] = 1;
+    s.animals.bird.pos = { x: 2, y: 3 }; s.animals.monkey.pos = { x: 1, y: 1 };
+    eq(legalTargets(s, 'bird').filter(x => x.action === 'up').length, 0, 'wall');
+  });
+  test('explore needs own-colour doorway; places a tile that connects; deck shrinks', () => {
+    const s = fresh(7);
+    assert(!applyAction(s, { type: 'explore', animal: 'squirrel' }).ok, 'not on doorway');
+    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } });
+    const deckBefore = s.deck.length;
+    assert(availableActions(s, 'squirrel').explore, 'should be able to explore');
+    assert(applyAction(s, { type: 'explore', animal: 'squirrel' }).ok, 'explore');
+    eq(s.deck.length, deckBefore - 1); eq(s.tiles.length, 2);
+    assert(legalTargets(s, 'squirrel').some(t => t.action === 'up' && t.x === 2 && t.y === -1), 'can walk into new tile');
+    assert(!availableActions(s, 'squirrel').explore, 'door is used up');
+    eq(s.curReveal.length, 1);
+  });
+  test('explore is refused for a wrong colour animal', () => {
+    const s = fresh(7);
+    s.animals.monkey.pos = { x: 2, y: 0 };                                    // squirrel's doorway
+    assert(!applyAction(s, { type: 'explore', animal: 'monkey' }).ok);
+  });
+  test('timer square resets the clock to full once, swaps sets, allows talking', () => {
+    const s = fresh(); tick(s, 0); tick(s, 50000);
+    const left = s.timeLeftMs; eq(left, 130000);
+    s.cells[key(0, 1)].kind = 'timer'; s.animals.squirrel.pos = { x: 1, y: 1 };
+    const r = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
+    assert(r.ok && r.events.some(e => e.type === 'reset'), 'reset');
+    eq(s.timeLeftMs, CONFIG.timerStartMs, 'time back to full');
+    eq(s.actionSets[0].includes('down'), true, 'sets swapped');
+    assert(s.talkAllowed, 'talk allowed');
+    s.animals.squirrel.pos = { x: 1, y: 1 };
+    applyAction(s, { type: 'pass' });                                         // set A is now holder 1's
+    assert(s.talkAllowed, 'pass keeps talk time');
+    const r2 = applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
+    assert(r2.ok && !r2.events.some(e => e.type === 'reset'), 'used square does nothing');
+    assert(!s.talkAllowed, 'talk ends with the next action');
+  });
+  test('grab happens when all four stand on food; burrows close; exit opens', () => {
+    const s = fresh(3); exploreEverything(s);
+    const foods = {}, exit = [];
+    for (const c of allCells(s)) { if (c.kind === 'food') foods[c.animal] = c; if (c.kind === 'exit') exit.push(c); }
+    ANIMALS.forEach(a => { s.animals[a].pos = { x: foods[a].x, y: foods[a].y }; });
+    const ev = []; arrive(s, 'monkey', ev);
+    assert(ev.some(e => e.type === 'grab') && s.phase === 'escape', 'grab');
+    eq(effectiveKind(s, allCells(s).find(c => c.kind === 'burrow')), 'closedBurrow');
+    ANIMALS.forEach((a, i) => {
+      s.animals[a].pos = { x: exit[0].x, y: exit[0].y }; const e2 = []; arrive(s, a, e2);
+      assert(e2.some(e => e.type === 'escape'), a + ' escapes');
+      if (i < 3) eq(s.phase, 'escape'); else eq(s.phase, 'won');
+    });
+    eq(s.result.won, true);
+  });
+  test('standing on food early does nothing; exit is locked before the grab', () => {
+    const s = fresh(3); exploreEverything(s);
+    const f = allCells(s).find(c => c.kind === 'food' && c.animal === 'rabbit');
+    s.animals.rabbit.pos = { x: f.x, y: f.y }; const ev = []; arrive(s, 'rabbit', ev); eq(ev.length, 0);
+    const x = allCells(s).find(c => c.kind === 'exit');
+    s.animals.bird.pos = { x: x.x, y: x.y }; arrive(s, 'bird', ev);
+    eq(s.animals.bird.escaped, false, 'cannot escape before grab');
+  });
+  test('burrow: from anywhere to a free burrow of own colour, only before the grab', () => {
+    const s = fresh(5); exploreEverything(s);
+    const mine = allCells(s).filter(c => c.kind === 'burrow' && c.animal === 'rabbit'); eq(mine.length, CONFIG.burrowsPerAnimal);
+    applyAction(s, { type: 'pass' });                                         // set B has burrow
+    assert(availableActions(s, 'rabbit').burrow, 'available from a plain square');
+    const other = allCells(s).find(c => c.kind === 'burrow' && c.animal === 'squirrel');
+    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: other.x, y: other.y } }).ok, 'not to another colour');
+    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'teleport from anywhere');
+    eq(s.animals.rabbit.pos.x, mine[1].x);
+    assert(!applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[1].x, y: mine[1].y } }).ok, 'not onto the square it stands on');
+    assert(applyAction(s, { type: 'burrow', animal: 'rabbit', to: { x: mine[0].x, y: mine[0].y } }).ok, 'and back');
+    s.animals.squirrel.pos = { x: mine[1].x, y: mine[1].y };
+    eq(legalTargets(s, 'rabbit').filter(t => t.action === 'burrow').length, 0, 'other burrow occupied');
+    s.animals.squirrel.pos = { x: 1, y: 2 }; s.phase = 'escape'; s.grabbed = true;
+    assert(!availableActions(s, 'rabbit').burrow, 'closed after grab');
+  });
+  test('logs: climb to the other end', () => {
+    let s = null;
+    for (let seed = 1; seed < 200 && !s; seed++) { const g = fresh(seed, 'hard'); exploreEverything(g); if (g.logList.length) s = g; }
+    assert(s, 'a log should appear in some game');
+    const [ax, ay, bx, by] = s.logList[0];
+    ANIMALS.forEach((a, i) => { s.animals[a].pos = { x: -50 - i, y: -50 }; });
+    s.animals.squirrel.pos = { x: ax, y: ay }; applyAction(s, { type: 'pass' });
+    assert(availableActions(s, 'squirrel').climb, 'climb available');
+    assert(applyAction(s, { type: 'climb', animal: 'squirrel' }).ok, 'climb');
+    eq(s.animals.squirrel.pos.x, bx); eq(s.animals.squirrel.pos.y, by);
+  });
+  test('timer runs from timestamps and ends the game; pause stops it', () => {
+    const s = fresh(); tick(s, 1000); tick(s, 2000); eq(s.timeLeftMs, CONFIG.timerStartMs - 1000);
+    s.paused = true; tick(s, 12000); eq(s.timeLeftMs, CONFIG.timerStartMs - 1000, 'paused');
+    s.paused = false; tick(s, 12000 + CONFIG.timerStartMs + 5);
+    eq(s.phase, 'lost'); eq(s.timeLeftMs, 0);
+    assert(!applyAction(s, { type: 'pass' }).ok, 'no actions after the end');
+  });
+  test('a loss during foraging does not look like a grab', () => {
+    const s = fresh(); tick(s, 0); tick(s, CONFIG.timerStartMs + 1);
+    eq(effectiveKind(s, allCells(s).find(c => c.kind === 'burrow')), 'burrow');
+  });
+  test('ping: replaced by a new one, seen by the next holder, cleared when passed back', () => {
+    const s = fresh();
+    applyAction(s, { type: 'ping', at: { x: 1, y: 1 } }); applyAction(s, { type: 'ping', at: { x: 3, y: 3 } });
+    eq(s.ping.x, 3); applyAction(s, { type: 'pass' }); assert(s.ping, 'next holder sees it');
+    applyAction(s, { type: 'pass' }); assert(!s.ping, 'gone after passing back');
+  });
+  test('catch-up: previous hold is recorded and tiles revealed are tracked', () => {
+    const s = fresh(2);
+    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } });
+    applyAction(s, { type: 'explore', animal: 'squirrel' });
+    applyAction(s, { type: 'pass' });
+    eq(s.lastHold.length, 1); eq(s.lastHold[0].path.length, 2); eq(s.lastReveal.length, 1);
+    eq(s.handoffs, 1); eq(s.curHold.length, 0);
+  });
+  test('custom start time: used at start and by the timer square', () => {
+    const s = fresh(1, 'easy', { timeMs: 90000 });
+    eq(s.timeLeftMs, 90000); tick(s, 0); tick(s, 30000);
+    s.cells[key(0, 1)].kind = 'timer'; s.animals.squirrel.pos = { x: 1, y: 1 };
+    applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 0, y: 1 } });
+    eq(s.timeLeftMs, 90000, 'reset to the chosen time');
+  });
+  test('move cap per hold', () => {
+    const old = CONFIG.moveCapPerHold; CONFIG.moveCapPerHold = 1;
+    try {
+      const s = fresh(); assert(applyAction(s, { type: 'move', animal: 'squirrel', to: { x: 2, y: 0 } }).ok);
+      assert(!applyAction(s, { type: 'move', animal: 'monkey', to: { x: 0, y: 2 } }).ok, 'cap reached');
+    } finally { CONFIG.moveCapPerHold = old; }
+  });
+  test('generator: same seed gives the same map when explored the same way', () => {
+    for (const feat of FEATURES) {
+      const a = fresh(11, 'normal', feat), b = fresh(11, 'normal', feat); exploreEverything(a); exploreEverything(b);
+      eq(JSON.stringify(a.tiles.map(t => [t.def.id, t.x0, t.y0, t.w, t.h, t.def.squares.map(q => q.kind)])), JSON.stringify(b.tiles.map(t => [t.def.id, t.x0, t.y0, t.w, t.h, t.def.squares.map(q => q.kind)])));
+    }
+  });
+  test('MAP IS ALWAYS WINNABLE: every tile placed, no overlaps, everything reachable without flyer gates (all features, many seeds)', () => {
+    for (const feat of FEATURES) for (const diff in CONFIG.tilesPerGame) for (let seed = 1; seed <= 40; seed++) {
+      const label = JSON.stringify(feat) + ' ' + diff + ' seed ' + seed;
+      const s = newGame({ seed, difficulty: diff, sets: DEFAULT_SETS, gates: feat.gates, exits: feat.exits, towers: feat.towers }); exploreEverything(s);
+      eq(s.deck.length, 0, label + ' deck not emptied');
+      eq(s.tiles.length, CONFIG.tilesPerGame[diff] + (feat.exits === 'each' ? 3 : 0) + 1);
+      eq(allCells(s).length, s.tiles.reduce((n, t) => n + t.w * t.h, 0), label + ' overlapping tiles');
+      const reach = reachableCells(s, key(START_POS.squirrel[1], START_POS.squirrel[0]));
+      for (const c of allCells(s)) if (c.kind !== 'bush') assert(reach.has(key(c.x, c.y)), label + ': unreachable ' + c.kind + ' at ' + c.x + ',' + c.y);
+      eq(allCells(s).filter(c => c.kind === 'timer').length, CONFIG.timerSquares, label + ' timers');
+      eq(allCells(s).filter(c => c.kind === 'tower').length, CONFIG.towerCount[feat.towers] || 0, label + ' towers');
+      eq(s.towersSeen, s.towersTotal, 'all towers revealed');
+      const exits = allCells(s).filter(c => c.kind === 'exit');
+      eq(exits.length, feat.exits === 'each' ? 4 : 1); if (feat.exits === 'each') eq(new Set(exits.map(c => c.animal)).size, 4);
+      ANIMALS.forEach(a => eq(allCells(s).filter(c => c.kind === 'food' && c.animal === a).length, 1, label + ' food ' + a));
+    }
+  });
+  test('MAP IS ALWAYS WINNABLE: an open doorway exists while tiles remain, whichever doors are explored', () => {
+    for (const feat of FEATURES) for (let seed = 1; seed <= 40; seed++) {
+      const s = newGame({ seed, difficulty: 'hard', sets: DEFAULT_SETS, gates: feat.gates, exits: feat.exits, towers: feat.towers }); const rng = mulberry32(seed);
+      while (s.deck.length) {
+        const open = doorways(s).filter(d => d.status === 'open');
+        assert(open.length > 0, JSON.stringify(feat) + ' seed ' + seed + ' ran out of open doorways with ' + s.deck.length + ' tiles left');
+        assert(drawTileAt(s, open[Math.floor(rng() * open.length)]) != null, 'a tile must fit behind an open doorway');
+      }
+    }
+  });
+  test('closed doorways once the deck is empty', () => {
+    const s = fresh(4, 'easy'); exploreEverything(s);
+    eq(doorways(s).filter(d => d.status === 'open').length, 0);
+  });
+  test('flyer gates: the bird and squirrel can cross, the rabbit and monkey cannot, and no tile needs them', () => {
+    let found = null;
+    for (let seed = 1; seed < 80 && !found; seed++) { const g = fresh(seed, 'hard', { gates: 'many' }); exploreEverything(g); if (g.gateList.length) found = g; }
+    assert(found, 'gates should appear'); const [ax, ay, bx, by] = found.gateList[0];
+    const dir = ax === bx ? (by > ay ? 'S' : 'N') : (bx > ax ? 'E' : 'W');
+    for (const a of ANIMALS) { const n = stepFrom(found, ax, ay, dir, a); if (FLYERS.includes(a)) assert(n && n.x === bx && n.y === by, a + ' should cross'); else assert(!n, a + ' must not cross'); }
+    assert(!stepFrom(found, ax, ay, dir), 'no animal given: closed');
+    const s2 = fresh(3, 'normal', { gates: 'off' }); exploreEverything(s2); eq(s2.gateList.length, 0, 'no gates when off');
+    // a flyer really uses it in play
+    ANIMALS.forEach((a, i) => { found.animals[a].pos = { x: -50 - i, y: -50 }; });
+    found.animals.bird.pos = { x: ax, y: ay }; found.actionSets = [['up', 'down', 'left', 'right', 'explore'], ['climb', 'burrow']]; found.holder = 0;
+    assert(legalTargets(found, 'bird').some(t => t.x === bx && t.y === by), 'bird target across the gate');
+    found.animals.rabbit.pos = { x: ax, y: ay }; found.animals.bird.pos = { x: -60, y: -60 };
+    assert(!legalTargets(found, 'rabbit').some(t => t.x === bx && t.y === by), 'rabbit cannot');
+  });
+  test('one exit per animal: only its own exit lets it leave, and only once every exit is found', () => {
+    const s = fresh(6, 'normal', { exits: 'each' }); exploreEverything(s);
+    const ex = {}; allCells(s).filter(c => c.kind === 'exit').forEach(c => { ex[c.animal] = c; });
+    ANIMALS.forEach(a => assert(ex[a], a + ' has an exit'));
+    ANIMALS.forEach(a => { s.animals[a].pos = { x: ex[a === 'squirrel' ? 'rabbit' : 'squirrel'].x, y: ex[a === 'squirrel' ? 'rabbit' : 'squirrel'].y }; });
+    s.phase = 'escape'; s.grabbed = true;
+    s.animals.squirrel.pos = { x: ex.rabbit.x, y: ex.rabbit.y }; const e1 = []; arrive(s, 'squirrel', e1); eq(s.animals.squirrel.escaped, false, 'wrong exit');
+    s.animals.squirrel.pos = { x: ex.squirrel.x, y: ex.squirrel.y }; arrive(s, 'squirrel', e1); eq(s.animals.squirrel.escaped, true, 'own exit');
+    const t = fresh(6, 'normal', { exits: 'each' });                       // exits not all found yet: locked
+    t.grabbed = true; t.phase = 'escape'; assert(!exitsReady(t), 'locked while exit tiles remain in the deck');
+  });
+  test('an animal waiting on its exit leaves when the last exit is found afterwards', () => {
+    const s = fresh(6, 'normal', { exits: 'each' });
+    const specs = s.deck.filter(id => s.specs[id].kind === 'exit'); eq(specs.length, 4);
+    exploreEverything(s);
+    // rewind: pretend the bird already stood on its exit and the other exit tiles were revealed only now
+    const ex = allCells(s).find(c => c.kind === 'exit' && c.animal === 'bird');
+    s.phase = 'escape'; s.grabbed = true; s.animals.bird.pos = { x: ex.x, y: ex.y };
+    s.deck.push('exit-rabbit');                                              // one exit tile still unrevealed: locked
+    s.specs['exit-rabbit'] = s.specs['exit-rabbit'] || { id: 'exit-rabbit', kind: 'exit', animal: 'rabbit' };
+    const ev = []; sweepEscapes(s, ev); eq(s.animals.bird.escaped, false, 'still locked');
+    s.deck.pop(); sweepEscapes(s, ev); eq(s.animals.bird.escaped, true, 'leaves once everything is found');
+  });
+  test('hunting towers: only the monkey on a tower with Destroy can remove it; exits unlock when all are gone', () => {
+    const s = fresh(8, 'normal', { towers: 'some', sets: [['up', 'left', 'explore', 'destroy'], ['down', 'right', 'climb', 'burrow']] }); exploreEverything(s);
+    eq(s.towersTotal, 2); eq(s.towersSeen, 2);
+    const towers = allCells(s).filter(c => c.kind === 'tower'); eq(towers.length, 2);
+    const exit = allCells(s).find(c => c.kind === 'exit');
+    s.animals.rabbit.pos = { x: towers[0].x, y: towers[0].y };
+    assert(!availableActions(s, 'rabbit').destroy && !applyAction(s, { type: 'destroy', animal: 'rabbit' }).ok, 'rabbit cannot');
+    s.animals.rabbit.pos = { x: -40, y: -40 }; s.animals.monkey.pos = { x: towers[0].x, y: towers[0].y };
+    applyAction(s, { type: 'pass' });                                           // holder 1 lacks destroy
+    assert(!availableActions(s, 'monkey').destroy, 'needs the destroy action');
+    applyAction(s, { type: 'pass' });
+    assert(availableActions(s, 'monkey').destroy, 'monkey on tower with destroy');
+    s.phase = 'escape'; s.grabbed = true;
+    s.animals.squirrel.pos = { x: exit.x, y: exit.y }; const ev = []; arrive(s, 'squirrel', ev);
+    eq(s.animals.squirrel.escaped, false, 'exit locked while towers stand');
+    const r = applyAction(s, { type: 'destroy', animal: 'monkey' }); assert(r.ok); eq(s.towersDestroyed, 1); eq(towers[0].kind, 'plain');
+    eq(s.animals.squirrel.escaped, false, 'one tower left');
+    s.animals.monkey.pos = { x: towers[1].x, y: towers[1].y };
+    assert(applyAction(s, { type: 'destroy', animal: 'monkey' }).ok); eq(s.towersDestroyed, 2);
+    eq(s.animals.squirrel.escaped, true, 'animal waiting on the exit leaves when the last tower falls');
+    assert(!applyAction(s, { type: 'destroy', animal: 'monkey' }).ok, 'nothing left to destroy');
+  });
+  test('towers can be destroyed before the grab and everything stays winnable (monkey reaches every tower)', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const s = newGame({ seed, difficulty: 'hard', towers: 'many' }); exploreEverything(s);
+      const reach = reachableCells(s, key(START_POS.monkey[1], START_POS.monkey[0]));
+      allCells(s).filter(c => c.kind === 'tower').forEach(c => assert(reach.has(key(c.x, c.y)), 'seed ' + seed + ' tower unreachable'));
+      assert(s.actionSets.flat().includes('destroy'), 'someone holds destroy');
+    }
+  });
+  test('AI: picks a legal action from the start and can hint at an animal for its partner', () => {
+    const s = fresh(9, 'easy');
+    for (const who of [0, 1]) {
+      const a = aiChoose(s, who); assert(a && ['move', 'explore', 'climb', 'burrow', 'destroy', 'pass'].includes(a.type));
+      if (a.type !== 'pass') { s.holder = who; assert(applyAction(JSON.parse(JSON.stringify(s)), a).ok, 'AI action must be legal: ' + JSON.stringify(a)); }
+    }
+    s.holder = 0;
+    const hint = aiHint(s, 0); assert(hint === null || cellAt(s, hint.x, hint.y), 'hint is a real square');
+    eq(s.holder, 0, 'aiChoose must not change whose turn it is');
+  });
+  test('AI: plays both sides (random action sets) and wins easy games, never an illegal move', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = selfPlay({ seed, difficulty: 'easy', timeMs: 600000 });
+      assert(!r.stuck, 'seed ' + seed + ' got stuck'); assert(r.won, 'seed ' + seed + ' not won');
+    }
+  });
+  test('AI: wins with every feature switched on (gates, one exit each, hunting towers)', () => {
+    for (let seed = 1; seed <= 4; seed++) {
+      const r = selfPlay({ seed, difficulty: 'normal', timeMs: 900000, gates: 'some', exits: 'each', towers: 'some' });
+      assert(!r.stuck, 'seed ' + seed + ' got stuck'); assert(r.won, 'seed ' + seed + ' not won');
+    }
+  });
+  test('AI: a partner ping on a doorway sends that doorway\'s animal there', () => {
+    const s = fresh(9, 'hard');                                   // holder 1 has Down/Right: bird -> south door, rabbit -> east door
+    const door = col => doorways(s).find(d => d.animal === col && d.status === 'open');
+    for (const col of ['bird', 'rabbit']) {
+      const d = door(col); s.ping = { x: d.x, y: d.y, by: 0 };
+      const c = aiChoose(s, 1);
+      assert(c.type === 'move' && c.animal === col && c.to.x === d.x && c.to.y === d.y, 'ping on the ' + col + ' door should send the ' + col + ': ' + JSON.stringify(c));
+    }
+    s.ping = { x: door('bird').x, y: door('bird').y, by: 1 };    // the AI's own ping is not an instruction to itself
+    assert(aiChoose(s, 1), 'still decides');
+  });
+
+  const failed = results.filter(r => !r.ok);
+  if (typeof console !== 'undefined') {
+    results.forEach(r => (verbose !== false || !r.ok) && console.log((r.ok ? '✓ ' : '✗ ') + r.name + (r.ok ? '' : '\n    ' + r.err)));
+    console.log(failed.length ? failed.length + ' of ' + results.length + ' tests FAILED' : 'All ' + results.length + ' tests passed');
+  }
+  return { passed: results.length - failed.length, failed: failed.length, results };
+}
+
+const FM = { aiDist, aiChoose, aiHint, selfPlay, CONFIG, ANIMALS, INFO, FLYERS, SIDES, DV, ACT_DIR, key, newGame, tick, applyAction, legalTargets,
+  availableActions, exploreDoor, doorways, cellAt, animalAt, effectiveKind, exitsReady, timerUsed, isOver, holderActions, arrive, runTests,
+  hashStr, mulberry32, configKey, stepFrom, buildDeck, makeActionSets, drawTileAt, exploreEverything };
 // ===== LOGIC END =====
 
 /* =====================================================================
@@ -1242,7 +1437,7 @@ const FM = { aiDist, aiChoose, aiHint, selfPlay, CONFIG, ANIMALS, INFO, LIB, bui
     get(k, d) { try { const v = localStorage.getItem('forestmaze.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('forestmaze.' + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
   };
-  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '', timeMs: 180000, tiles: 'random', partner: 'human' }, store.get('settings', {}));
+  const settings = Object.assign({ sound: true, vibration: true, difficulty: 'normal', seed: '', timeMs: 180000, partner: 'human', gates: 'off', exits: 'shared', towers: 'off' }, store.get('settings', {}));
   const saveSettings = () => store.set('settings', settings);
 
   // ---------- sound & vibration ----------
@@ -1284,8 +1479,10 @@ const FM = { aiDist, aiChoose, aiHint, selfPlay, CONFIG, ANIMALS, INFO, LIB, bui
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
     if (id === 'game') requestAnimationFrame(resize);
   }
-  const bestKey = (d, ms, ai) => d + ':' + ms / 1000 + (ai ? ':ai' : '');     // best times are only comparable for the same time limit
-const bestOf = (d, ms, ai) => store.get('best', {})[bestKey(d, ms, ai)];
+  const featKey = f => (f.gates === 'off' && f.exits === 'shared' && f.towers === 'off') ? '' : ':' + [f.gates, f.exits, f.towers].join('/');
+  const bestKey = (d, ms, ai, f) => d + ':' + ms / 1000 + (ai ? ':ai' : '') + featKey(f);   // best times are only comparable for the same rules
+  const bestOf = (d, ms, ai, f) => store.get('best', {})[bestKey(d, ms, ai, f)];
+  const settingsFeatures = () => ({ gates: settings.gates, exits: settings.exits, towers: settings.towers });
 const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minTimeMs, Math.min(C.maxTimeMs, settings.timeMs + dir * C.timeStepMs)); saveSettings(); syncSetup(); };
   function randomSeed() { return 100000 + Math.floor(Math.random() * 900000); }
   function parseSeed(str) {
@@ -1303,14 +1500,16 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   FM.ui = G;
   const cv = $('cv'), ctx = cv.getContext('2d');
 
-  function startGame(difficulty, seed, timeMs, tiles, partner) {
-    G.state = FM.newGame({ difficulty, seed, timeMs, tiles, ai: partner === 'ai' });
+  const ACT_UI = { up: ['⬆️', 'Up'], down: ['⬇️', 'Down'], left: ['⬅️', 'Left'], right: ['➡️', 'Right'], explore: ['🧭', 'Explore'], climb: ['🪵', 'Climb'], burrow: ['🕳️', 'Burrow'], destroy: ['💣', 'Destroy'] };
+  const setHtml = (st, i) => st.actionSets[i].map(a => ACT_UI[a][0] + ' ' + ACT_UI[a][1]).join(' · ');
+  function startGame(difficulty, seed, timeMs, partner, feat) {
+    G.state = FM.newGame(Object.assign({ difficulty, seed, timeMs, ai: partner === 'ai' }, feat));
     G.state.paused = true;
     Object.assign(G, { selected: null, burrowMode: false, ended: false, goal: null, trailUntil: 0, barKey: '', trackKey: '', lastSec: -1, doorCache: null, anim: {}, doorKey: '', aiNext: 0, aiMoves: 0 });
     show('game');
     requestAnimationFrame(() => { resize(); G.cam.z = Math.min(G.W, G.H) / 6.8; G.cam.x = 2.5; G.cam.y = 2.5; });
     FM.ANIMALS.forEach(a => { G.anim[a] = { x: G.state.animals[a].pos.x, y: G.state.animals[a].pos.y }; });
-    overlay('<h2>Ready?</h2><p>' + (G.state.aiHolder != null ? 'You are Player 1. Tap Pass to hand the phone to your AI partner (Player 2); it plays, then passes back. ' : 'Player 1 holds the phone first. ') + 'You have ' + fmt(G.state.startMs) + '. The clock starts when you tap Start.</p><button class="big" id="ovGo">Start</button><button class="big alt" id="ovQuit">Quit</button>');
+    overlay('<h2>Ready?</h2><p>' + (G.state.aiHolder != null ? 'You are Player 1. Tap Pass to hand the phone to your AI partner (Player 2); it plays, then passes back. ' : 'Player 1 holds the phone first. ') + 'You have ' + fmt(G.state.startMs) + '. The clock starts when you tap Start.</p><div class="sets">' + [0, 1].map(i => '<b>' + (G.state.aiHolder != null ? (i === G.state.aiHolder ? '🤖 AI' : 'You') : 'Player ' + (i + 1)) + '</b><br>' + setHtml(G.state, i)).join('<br><br>') + '</div><button class="big" id="ovGo">Start</button><button class="big alt" id="ovQuit">Quit</button>');
     $('ovGo').onclick = () => { closeOverlay(); G.state.paused = false; G.state.lastTickMs = performance.now(); requestWake(); };
     $('ovQuit').onclick = quitGame;
   }
@@ -1351,7 +1550,8 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
       if (e.type === 'ping') SFX.ping();
       if (e.type === 'reveal') { SFX.reveal(); focusNewTile(e.tile); }
       if (e.type === 'reset') { SFX.flip(); toast('⏳ Timer reset to ' + fmt(e.timeLeftMs) + '! Roles swapped.', 2600); }
-      if (e.type === 'grab') { SFX.grab(); toast('🎉 Food grabbed! Burrows closed. To the exit!', 2800); }
+      if (e.type === 'grab') { SFX.grab(); toast('🎉 Food grabbed! Burrows closed.' + exitHint(st), 3400); }
+      if (e.type === 'destroy') { SFX.grab(); toast(e.towersLeft ? '💥 Tower destroyed! ' + e.towersLeft + ' left.' : '💥 Last tower destroyed!' + (FM.exitsReady(st) ? ' Exits are open!' : exitHint(st)), 2600); }
       if (e.type === 'escape') { SFX.escape(); }
       if (e.type === 'pass') {
         SFX.pass(); G.selected = null; G.trailUntil = performance.now() + FM.CONFIG.trailMs;
@@ -1387,8 +1587,13 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     }
   }
 
+  function exitHint(st) {
+    if (st.towersTotal > st.towersDestroyed) return ' The monkey must destroy the towers 🗼 before anyone can leave.';
+    return FM.exitsReady(st) ? ' Head for the exit!' : ' Find all the exits.';
+  }
+
   function focusNewTile(idx) {
-    const t = G.state.tiles[idx], cx = t.tx * 5 + 2.5, cy = t.ty * 5 + 2.5, s = w2s(cx, cy), m = 40;
+    const t = G.state.tiles[idx], cx = t.x0 + t.w / 2, cy = t.y0 + t.h / 2, s = w2s(cx, cy), m = 40;
     if (s.x < m || s.y < m || s.x > G.W - m || s.y > G.H - m) G.goal = { x: cx, y: cy };
   }
 
@@ -1397,7 +1602,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   const s2w = (x, y) => ({ x: (x - G.W / 2) / G.cam.z + G.cam.x, y: (y - G.H / 2) / G.cam.z + G.cam.y });
   function bounds() {
     let a = 1e9, b = 1e9, c = -1e9, d = -1e9;
-    for (const t of G.state.tiles) { a = Math.min(a, t.tx * 5); b = Math.min(b, t.ty * 5); c = Math.max(c, t.tx * 5 + 5); d = Math.max(d, t.ty * 5 + 5); }
+    for (const t of G.state.tiles) { a = Math.min(a, t.x0); b = Math.min(b, t.y0); c = Math.max(c, t.x0 + t.w); d = Math.max(d, t.y0 + t.h); }
     return { minx: a, miny: b, maxx: c, maxy: d };
   }
   function clampCam() {
@@ -1490,7 +1695,6 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   }
 
   // ---------- HUD ----------
-  const ACT_UI = { up: ['⬆️', 'Up'], down: ['⬇️', 'Down'], left: ['⬅️', 'Left'], right: ['➡️', 'Right'], explore: ['🧭', 'Explore'], climb: ['🪵', 'Climb'], burrow: ['🕳️', 'Burrow'] };
   function updateHud() {
     const st = G.state;
     document.body.className = 'p' + st.holder;
@@ -1508,18 +1712,18 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
 
     // action bar
     const av = G.selected ? FM.availableActions(st, G.selected) : {};
-    const k = [st.holder, acts.join(), G.selected, av.explore, av.climb, av.burrow, G.burrowMode].join('|');
+    const k = [st.holder, acts.join(), G.selected, av.explore, av.climb, av.burrow, av.destroy, G.burrowMode].join('|');
     if (k !== G.barKey) {
       G.barKey = k;
       const box = $('actions'); box.innerHTML = '';
       acts.forEach(a => {
-        const d = document.createElement('div'), isBtn = a === 'explore' || a === 'climb' || a === 'burrow';
+        const d = document.createElement('div'), isBtn = a === 'explore' || a === 'climb' || a === 'burrow' || a === 'destroy';
         d.className = 'chip' + (isBtn ? ' btn' : '') + (isBtn && av[a] ? ' lit' : '') + (a === 'burrow' && G.burrowMode ? ' armed' : '');
         d.innerHTML = '<span class="ic">' + ACT_UI[a][0] + '</span><small>' + ACT_UI[a][1] + '</small>';
         if (isBtn) d.onclick = () => {
           if (aiHolding()) return;
           if (!G.selected) { toast('Tap an animal first', 1200); SFX.bad(); return; }
-          if (!av[a]) { toast(a === 'explore' ? 'Stand on a doorway of its own colour' : a === 'climb' ? 'Stand on the end of a log' : 'No free burrow of its colour yet', 1500); SFX.bad(); return; }
+          if (!av[a]) { toast(a === 'explore' ? 'Stand on a doorway of its own colour' : a === 'climb' ? 'Stand on the end of a log' : a === 'destroy' ? 'Only the monkey, standing on a tower' : 'No free burrow of its colour yet', 1500); SFX.bad(); return; }
           if (a === 'burrow') { G.burrowMode = !G.burrowMode; G.barKey = ''; toast('Tap a burrow to jump to', 1300); } else act({ type: a, animal: G.selected });
         };
         box.appendChild(d);
@@ -1530,11 +1734,14 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     const tk = FM.ANIMALS.map(n => {
       const an = st.animals[n], c = FM.cellAt(st, an.pos.x, an.pos.y);
       return an.escaped ? 'out' : (st.phase === 'forage' ? (c.kind === 'food' && c.animal === n ? 'lit' : 'dim') : 'lit');
-    }).join();
+    }).join() + '|' + st.towersDestroyed + '|' + FM.exitsReady(st) + '|' + st.deck.length;
     if (tk !== G.trackKey) {
-      G.trackKey = tk; const states = tk.split(',');
+      G.trackKey = tk; const states = tk.split('|')[0].split(',');
+      const pills = [];
+      if (st.towersTotal) pills.push('<div class="pill">🗼 ' + (st.towersTotal - st.towersDestroyed) + '</div>');
+      if (st.grabbed && !FM.exitsReady(st)) pills.push('<div class="pill">🔒</div>');
       $('tracker').innerHTML = FM.ANIMALS.map((n, i) => '<div class="fi ' + (states[i] === 'dim' ? '' : states[i]) + '" style="--c:' + FM.INFO[n].color + '">' +
-        (states[i] === 'out' ? FM.INFO[n].emoji + '✅' : FM.INFO[n].emoji + FM.INFO[n].food) + '</div>').join('');
+        (states[i] === 'out' ? FM.INFO[n].emoji + '✅' : FM.INFO[n].emoji + FM.INFO[n].food) + '</div>').join('') + pills.join('');
     }
   }
 
@@ -1557,30 +1764,33 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     const x = Math.max(ax, bx); return [x, ay, x, ay + 1];
   }
   const SIDE_SEG = { N: (x, y) => [x, y, x + 1, y], S: (x, y) => [x, y + 1, x + 1, y + 1], W: (x, y) => [x, y, x, y + 1], E: (x, y) => [x + 1, y, x + 1, y + 1] };
+  // top-left of the 3x3 "unknown tile" marker behind an open doorway
+  const ghostBox = d => d.side === 'N' ? [d.bx - 1, d.by - 2] : d.side === 'S' ? [d.bx - 1, d.by] : d.side === 'W' ? [d.bx - 2, d.by - 1] : [d.bx, d.by - 1];
 
   function draw(now) {
-    const st = G.state, z = G.cam.z, W = G.W, H = G.H, ph = st.phase;
+    const st = G.state, z = G.cam.z, W = G.W, H = G.H;
     ctx.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
     ctx.fillStyle = '#14281c'; ctx.fillRect(0, 0, W, H);
     const vis = (x, y, w, h) => { const a = w2s(x, y); return a.x < W && a.y < H && a.x + w * z > 0 && a.y + h * z > 0; };
     const doors = doorList();
     const pulse = 0.5 + 0.5 * Math.sin(now / 280);
 
-    // ghost cells behind open doorways
-    for (const d of doors) if (d.status === 'open' && vis(d.nx * 5, d.ny * 5, 5, 5)) {
-      const col = FM.INFO[d.animal].color, a = w2s(d.nx * 5 + .15, d.ny * 5 + .15);
+    // unknown tiles behind open doorways
+    for (const d of doors) if (d.status === 'open') {
+      const [gx, gy] = ghostBox(d); if (!vis(gx, gy, 3, 3)) continue;
+      const col = FM.INFO[d.animal].color, a = w2s(gx + .1, gy + .1);
       ctx.save(); ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.strokeStyle = col; ctx.globalAlpha = .45 + .25 * pulse;
       ctx.lineWidth = Math.max(2, z * .06); ctx.setLineDash([z * .25, z * .2]);
-      ctx.beginPath(); ctx.roundRect(a.x, a.y, 4.7 * z, 4.7 * z, z * .3); ctx.fill(); ctx.stroke(); ctx.restore();
-      ctx.fillStyle = '#fff'; emoji('❓', d.nx * 5 + 2.5, d.ny * 5 + 2.5, 1.4, .35);
+      ctx.beginPath(); ctx.roundRect(a.x, a.y, 2.8 * z, 2.8 * z, z * .3); ctx.fill(); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = '#fff'; emoji('❓', gx + 1.5, gy + 1.5, 1.1, .35);
     }
 
     // squares
     st.tiles.forEach((t, ti) => {
-      if (!vis(t.tx * 5, t.ty * 5, 5, 5)) return;
+      if (!vis(t.x0, t.y0, t.w, t.h)) return;
       const glow = now < G.trailUntil && st.lastReveal.includes(ti);
-      for (let i = 0; i < 25; i++) {
-        const x = t.tx * 5 + (i % 5), y = t.ty * 5 + Math.floor(i / 5), c = FM.cellAt(st, x, y);
+      for (let r = 0; r < t.h; r++) for (let q = 0; q < t.w; q++) {
+        const x = t.x0 + q, y = t.y0 + r, c = FM.cellAt(st, x, y);
         ctx.fillStyle = ((x + y) & 1) ? '#bfe0a6' : '#b3d79a'; rect(x, y, 1, 1);
         const k = FM.effectiveKind(st, c);
         if (c.kind === 'bush') {
@@ -1596,21 +1806,28 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
           ctx.strokeStyle = k === 'burrow' ? col : '#999'; ctx.lineWidth = Math.max(2, z * .09); circle(x + .5, y + .55, .38, 'stroke');
           if (k === 'closedBurrow') { ctx.strokeStyle = '#555'; ctx.lineWidth = Math.max(1.5, z * .06); line(x + .3, y + .35, x + .7, y + .75); line(x + .7, y + .35, x + .3, y + .75); }
         } else if (k === 'lockedExit' || k === 'exit') {
+          const col = c.animal ? FM.INFO[c.animal].color : '#1faa59';
           ctx.fillStyle = k === 'exit' ? 'rgba(255,255,255,.65)' : 'rgba(80,80,80,.35)'; rect(x + .05, y + .05, .9, .9);
-          ctx.strokeStyle = k === 'exit' ? '#1faa59' : '#666'; ctx.lineWidth = Math.max(2, z * .07); const a = w2s(x + .05, y + .05); ctx.strokeRect(a.x, a.y, .9 * z, .9 * z);
+          ctx.strokeStyle = k === 'exit' ? col : '#666'; ctx.lineWidth = Math.max(2, z * .07); const a = w2s(x + .05, y + .05); ctx.strokeRect(a.x, a.y, .9 * z, .9 * z);
+          if (c.animal) { ctx.strokeStyle = col; ctx.lineWidth = Math.max(3, z * .12); ctx.strokeRect(a.x + z * .04, a.y + z * .04, .82 * z, .82 * z); }
           emoji('🚪', x + .5, y + .5, .65, k === 'exit' ? 1 : .55);
+          if (c.animal) emoji(FM.INFO[c.animal].emoji, x + .8, y + .22, .36, k === 'exit' ? 1 : .6);
           if (k === 'lockedExit') emoji('🔒', x + .78, y + .78, .32);
-          else { ctx.strokeStyle = '#1faa59'; ctx.globalAlpha = pulse; circle(x + .5, y + .5, .55 + .1 * pulse, 'stroke'); ctx.globalAlpha = 1; }
+          else { ctx.strokeStyle = col; ctx.globalAlpha = pulse; circle(x + .5, y + .5, .55 + .1 * pulse, 'stroke'); ctx.globalAlpha = 1; }
         } else if (k === 'timer') {
           ctx.fillStyle = 'rgba(255,217,102,.85)'; circle(x + .5, y + .5, .42); emoji('⏳', x + .5, y + .5, .6);
         } else if (k === 'usedTimer') {
           ctx.fillStyle = 'rgba(120,120,120,.35)'; circle(x + .5, y + .5, .4); emoji('⏳', x + .5, y + .5, .5, .35);
           ctx.strokeStyle = '#555'; ctx.lineWidth = Math.max(1.5, z * .06); line(x + .25, y + .25, x + .75, y + .75); line(x + .75, y + .25, x + .25, y + .75);
+        } else if (k === 'tower') {
+          ctx.fillStyle = 'rgba(120,70,30,.45)'; circle(x + .5, y + .55, .42); emoji('🗼', x + .5, y + .48, .78);
+        } else if (c.rubble) {
+          ctx.fillStyle = 'rgba(90,70,50,.55)'; [[.3, .6, .12], [.55, .7, .1], [.65, .4, .08], [.4, .35, .07]].forEach(([dx, dy, rr]) => circle(x + dx, y + dy, rr));
         }
       }
       if (glow) {
         ctx.save(); ctx.strokeStyle = '#fff176'; ctx.lineWidth = Math.max(3, z * .12); ctx.globalAlpha = .5 + .5 * pulse;
-        const a = w2s(t.tx * 5, t.ty * 5); ctx.strokeRect(a.x, a.y, 5 * z, 5 * z); ctx.restore();
+        const a = w2s(t.x0, t.y0); ctx.strokeRect(a.x, a.y, t.w * z, t.h * z); ctx.restore();
       }
     });
 
@@ -1631,13 +1848,13 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     }
     // tile borders: fence everywhere, except where doorways connect
     st.tiles.forEach((t, ti) => {
-      if (!vis(t.tx * 5, t.ty * 5, 5, 5)) return;
-      const x0 = t.tx * 5, y0 = t.ty * 5;
+      if (!vis(t.x0, t.y0, t.w, t.h)) return;
       const doorHere = {}; doors.filter(d => d.tile === ti).forEach(d => { doorHere[d.side] = d; });
       for (const side of FM.SIDES) {
-        for (let n = 0; n < 5; n++) {
-          const x = side === 'N' || side === 'S' ? x0 + n : (side === 'W' ? x0 : x0 + 4);
-          const y = side === 'W' || side === 'E' ? y0 + n : (side === 'N' ? y0 : y0 + 4);
+        const len = (side === 'N' || side === 'S') ? t.w : t.h;
+        for (let n = 0; n < len; n++) {
+          const x = side === 'N' || side === 'S' ? t.x0 + n : (side === 'W' ? t.x0 : t.x0 + t.w - 1);
+          const y = side === 'W' || side === 'E' ? t.y0 + n : (side === 'N' ? t.y0 : t.y0 + t.h - 1);
           const d = doorHere[side], isDoorSq = d && x === d.x && y === d.y;
           if (isDoorSq && d.status === 'linked') continue;
           const [x1, y1, x2, y2] = SIDE_SEG[side](x, y);
@@ -1659,6 +1876,13 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
         }
       }
     });
+    // flyer gates: a gap in a fence that only the bird and squirrel can cross
+    for (const [ax, ay, bx, by] of st.gateList) {
+      const [x1, y1, x2, y2] = edgeSeg(ax, ay, bx, by);
+      ctx.strokeStyle = '#fff3b0'; ctx.lineWidth = Math.max(5, z * .2); ctx.setLineDash([z * .14, z * .1]); line(x1, y1, x2, y2); ctx.setLineDash([]);
+      ctx.strokeStyle = '#e0a800'; ctx.lineWidth = Math.max(2, z * .07); line(x1, y1, x2, y2);
+      emoji('🪶', (x1 + x2) / 2, (y1 + y2) / 2, .5);
+    }
     ctx.lineCap = 'butt';
 
     // catch-up trails
@@ -1681,7 +1905,7 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
         ctx.fillStyle = 'rgba(255,255,255,.55)'; circle(t.x + .5, t.y + .5, G.burrowMode ? .45 : .2);
         ctx.strokeStyle = col; ctx.lineWidth = Math.max(2, z * .06);
         circle(t.x + .5, t.y + .5, (G.burrowMode ? .45 : .2) + (G.burrowMode ? .08 * pulse : 0), 'stroke');
-        if (!G.burrowMode && c.kind === 'exit' && st.phase === 'escape') { ctx.strokeStyle = '#1faa59'; circle(t.x + .5, t.y + .5, .42, 'stroke'); }
+        if (!G.burrowMode && c.kind === 'exit' && FM.exitsReady(st) && (!c.animal || c.animal === G.selected)) { ctx.strokeStyle = '#1faa59'; circle(t.x + .5, t.y + .5, .42, 'stroke'); }
       }
     }
 
@@ -1755,15 +1979,15 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
     G.selected = null; releaseWake();
     setTimeout(() => {
       if (G.state !== st) return;
-      if (r.won) { const b = store.get('best', {}); const bk = bestKey(st.difficulty, st.startMs, st.aiHolder != null); if (!(b[bk] >= r.timeLeftMs)) { b[bk] = r.timeLeftMs; store.set('best', b); r.newBest = true; } }
+      if (r.won) { const b = store.get('best', {}); const bk = bestKey(st.difficulty, st.startMs, st.aiHolder != null, st.features); if (!(b[bk] >= r.timeLeftMs)) { b[bk] = r.timeLeftMs; store.set('best', b); r.newBest = true; } }
       $('endTitle').textContent = r.won ? '🎉 You escaped!' : '⏰ Time ran out';
-      const best = bestOf(st.difficulty, st.startMs, st.aiHolder != null);
+      const best = bestOf(st.difficulty, st.startMs, st.aiHolder != null, st.features);
       $('endStats').innerHTML = '<span>Result</span><span>' + (r.won ? 'Win' : 'Lose') + '</span>' +
         '<span>Time left</span><span>' + fmt(r.timeLeftMs) + '</span>' +
         '<span>Handoffs</span><span>' + r.handoffs + '</span>' +
         '<span>Difficulty</span><span>' + st.difficulty + '</span>' +
         '<span>Time limit</span><span>' + fmt(st.startMs) + '</span>' +
-        '<span>Tiles</span><span>' + st.tilesMode + '</span>' +
+        (featKey(st.features) ? '<span>Extras</span><span>' + [st.features.gates !== 'off' ? '🪶' : '', st.features.exits === 'each' ? '🚪×4' : '', st.features.towers !== 'off' ? '🗼' : ''].join(' ') + '</span>' : '') +
         '<span>Partner</span><span>' + (st.aiHolder != null ? 'AI 🤖' : 'Person') + '</span>' +
         '<span>Seed</span><span>' + st.seed + '</span>' +
         (best != null ? '<span>Best time left</span><span>' + fmt(best) + (r.newBest ? ' 🏆 new!' : '') + '</span>' : '');
@@ -1775,10 +1999,10 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   function syncSetup() {
     document.querySelectorAll('#diffSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === settings.difficulty));
     $('seedIn').value = settings.seed || '';
-    document.querySelectorAll('#tilesSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === settings.tiles));
+    [['gatesSeg', 'gates'], ['exitsSeg', 'exits'], ['towersSeg', 'towers']].forEach(([id, k]) => document.querySelectorAll('#' + id + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === settings[k])));
     document.querySelectorAll('#partnerSeg button').forEach(b => b.classList.toggle('on', b.dataset.p === settings.partner));
     $('timeVal').textContent = fmt(settings.timeMs);
-    const b = bestOf(settings.difficulty, settings.timeMs, settings.partner === 'ai'); $('bestLine').textContent = b != null ? '🏆 Best time left (' + settings.difficulty + ', ' + fmt(settings.timeMs) + '): ' + fmt(b) : '';
+    const b = bestOf(settings.difficulty, settings.timeMs, settings.partner === 'ai', settingsFeatures()); $('bestLine').textContent = b != null ? '🏆 Best time left (' + settings.difficulty + ', ' + fmt(settings.timeMs) + '): ' + fmt(b) : '';
   }
   function syncSettings() {
     $('tgSound').classList.toggle('off', !settings.sound); $('tgSound').lastChild.textContent = settings.sound ? 'On' : 'Off';
@@ -1791,10 +2015,10 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   document.querySelectorAll('#diffSeg button').forEach(b => b.onclick = () => { settings.difficulty = b.dataset.d; saveSettings(); syncSetup(); });
   $('seedIn').oninput = () => { settings.seed = $('seedIn').value.trim(); saveSettings(); };
   document.querySelectorAll('#partnerSeg button').forEach(b => b.onclick = () => { settings.partner = b.dataset.p; saveSettings(); syncSetup(); });
-  document.querySelectorAll('#tilesSeg button').forEach(b => b.onclick = () => { settings.tiles = b.dataset.t; saveSettings(); syncSetup(); });
+  [['gatesSeg', 'gates'], ['exitsSeg', 'exits'], ['towersSeg', 'towers']].forEach(([id, k]) => document.querySelectorAll('#' + id + ' button').forEach(b => b.onclick = () => { settings[k] = b.dataset.v; saveSettings(); syncSetup(); }));
   $('btnStart').onclick = () => {
     settings.seed = $('seedIn').value.trim(); saveSettings();
-    startGame(settings.difficulty, parseSeed(settings.seed), settings.timeMs, settings.tiles, settings.partner);
+    startGame(settings.difficulty, parseSeed(settings.seed), settings.timeMs, settings.partner, settingsFeatures());
   };
   $('tgSound').onclick = () => { settings.sound = !settings.sound; saveSettings(); syncSettings(); tone(600, .06); };
   $('tgVib').onclick = () => { settings.vibration = !settings.vibration; saveSettings(); syncSettings(); buzz(40); };
@@ -1802,8 +2026,8 @@ const stepTime = dir => { const C = FM.CONFIG; settings.timeMs = Math.max(C.minT
   $('pauseBtn').onclick = pauseGame;
   $('fitBtn').onclick = () => { if (G.state && !G.state.paused) { G.trailUntil = 0; fitCamera(); } };
   $('passBtn').onclick = () => act({ type: 'pass' });
-  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed, G.state.startMs, G.state.tilesMode, G.state.aiHolder != null ? 'ai' : 'human');
-  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed(), G.state.startMs, G.state.tilesMode, G.state.aiHolder != null ? 'ai' : 'human');
+  $('btnReplay').onclick = () => startGame(G.state.difficulty, G.state.seed, G.state.startMs, G.state.aiHolder != null ? 'ai' : 'human', G.state.features);
+  $('btnNew').onclick = () => startGame(G.state.difficulty, randomSeed(), G.state.startMs, G.state.aiHolder != null ? 'ai' : 'human', G.state.features);
   $('timeMinus').onclick = () => stepTime(-1);
   $('timePlus').onclick = () => stepTime(1);
   document.addEventListener('contextmenu', e => e.preventDefault());
